@@ -14,6 +14,7 @@ import
   } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const LogoText = require('../../assets/logo-text.png');
 
@@ -36,6 +37,7 @@ export default function DomainEntryScreen({ onDomainSaved })
 {
   const [subdomain, setSubdomain] = useState('');
   const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleSave = async () =>
   {
@@ -69,7 +71,7 @@ export default function DomainEntryScreen({ onDomainSaved })
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

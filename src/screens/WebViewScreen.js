@@ -1,10 +1,13 @@
 import React from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, SafeAreaView, Platform, StatusBar as RNStatusBar } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function WebViewScreen({ url, onChangeDomain })
 {
+  const insets = useSafeAreaInsets();
+
   // Safe check for URL validity
   if (!url)
   {
@@ -19,9 +22,9 @@ export default function WebViewScreen({ url, onChangeDomain })
   const displayDomain = url.replace('https://', '').replace('/', '');
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <SafeAreaView style={styles.topBarContainer}>
+      <View style={[styles.topBarContainer, { paddingTop: insets.top }]}>
         <View style={styles.topBar}>
           <Text style={styles.domainText} numberOfLines={1}>
             {displayDomain}
@@ -34,7 +37,7 @@ export default function WebViewScreen({ url, onChangeDomain })
             <Text style={styles.changeButtonText}>Ändern</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
 
       <WebView
         source={{ uri: url }}
@@ -59,7 +62,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
     zIndex: 10,
   },
   topBar: {

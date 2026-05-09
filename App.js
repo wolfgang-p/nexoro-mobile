@@ -2,12 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Screens
 import DomainEntryScreen from './src/screens/DomainEntryScreen';
 import WebViewScreen from './src/screens/WebViewScreen';
 
 export default function App()
+{
+  return (
+    <SafeAreaProvider>
+      <AppInner />
+    </SafeAreaProvider>
+  );
+}
+
+function AppInner()
 {
   const [domain, setDomain] = useState(null);
   const [loading, setLoading] = useState(true);
