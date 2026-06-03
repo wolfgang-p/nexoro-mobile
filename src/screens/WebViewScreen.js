@@ -17,6 +17,46 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { buildDomain, toLabel } from '../utils/instances';
 
+// Verhindert sowohl den Pinch-Zoom (zwei Finger) als auch den automatischen
+// Zoom, den iOS beim Fokussieren eines Input-Feldes auslöst. Wird vor dem
+// Laden der Seite injiziert und reagiert zusätzlich auf dynamisch nachgeladene
+// Inhalte (z. B. SPA-Login), damit das Viewport-Tag erhalten bleibt.
+const DISABLE_ZOOM_JS = `
+(function() {
+  function lockViewport() {
+    var content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover';
+    var meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'viewport';
+      (document.head || document.documentElement).appendChild(meta);
+    }
+    if (meta.getAttribute('content') !== content) {
+      meta.setAttribute('content', content);
+    }
+  }
+  lockViewport();
+  document.addEventListener('DOMContentLoaded', lockViewport);
+  // Falls die Seite das Viewport-Tag später überschreibt, erneut setzen.
+  if (window.MutationObserver) {
+    var obs = new MutationObserver(lockViewport);
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  // Verhindert Pinch-Zoom über Gesten-Events (iOS Safari/WKWebView).
+  document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener('gestureend', function(e) { e.preventDefault(); }, { passive: false });
+  // Verhindert Double-Tap-Zoom.
+  var lastTouch = 0;
+  document.addEventListener('touchend', function(e) {
+    var now = Date.now();
+    if (now - lastTouch <= 300) { e.preventDefault(); }
+    lastTouch = now;
+  }, { passive: false });
+  true;
+})();
+`;
+
 const COLORS = {
   primary: '#40BCC7',
   background: '#F8FAFC',
@@ -129,6 +169,11 @@ export default function WebViewScreen({
         source={{ uri: url }}
         style={styles.webview}
         startInLoadingState={true}
+        scalesPageToFit={false}
+        injectedJavaScriptBeforeContentLoaded={DISABLE_ZOOM_JS}
+        injectedJavaScript={DISABLE_ZOOM_JS}
+        setBuiltInZoomControls={false}
+        setDisplayZoomControls={false}
         renderLoading={() => (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
