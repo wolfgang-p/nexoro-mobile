@@ -35,11 +35,33 @@ const DISABLE_ZOOM_JS = `
       meta.setAttribute('content', content);
     }
   }
+  // iOS zoomt beim Fokussieren in Felder mit Schriftgröße < 16px hinein.
+  // Wir erzwingen daher mindestens 16px für alle Formularfelder – global auf
+  // jeder Seite, nicht nur im Login.
+  function lockFontSize() {
+    var styleId = '__no_zoom_font_style';
+    if (!document.getElementById(styleId)) {
+      var style = document.createElement('style');
+      style.id = styleId;
+      style.appendChild(document.createTextNode(
+        'input, select, textarea, [contenteditable] { font-size: 16px !important; }'
+      ));
+      (document.head || document.documentElement).appendChild(style);
+    }
+    // Direkt am Element setzen, damit auch Inline-Styles der Seite überstimmt werden.
+    var fields = document.querySelectorAll('input, select, textarea, [contenteditable]');
+    for (var i = 0; i < fields.length; i++) {
+      if (fields[i].style.fontSize !== '16px') {
+        fields[i].style.setProperty('font-size', '16px', 'important');
+      }
+    }
+  }
   lockViewport();
-  document.addEventListener('DOMContentLoaded', lockViewport);
+  lockFontSize();
+  document.addEventListener('DOMContentLoaded', function() { lockViewport(); lockFontSize(); });
   // Falls die Seite das Viewport-Tag später überschreibt, erneut setzen.
   if (window.MutationObserver) {
-    var obs = new MutationObserver(lockViewport);
+    var obs = new MutationObserver(function() { lockViewport(); lockFontSize(); });
     obs.observe(document.documentElement, { childList: true, subtree: true });
   }
   // Verhindert Pinch-Zoom über Gesten-Events (iOS Safari/WKWebView).
