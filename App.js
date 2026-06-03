@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import {
+  loadInstances,
+  addInstance,
+  setActiveInstance,
+  removeInstance,
+} from './src/utils/instances';
 
 // Screens
 import DomainEntryScreen from './src/screens/DomainEntryScreen';
@@ -19,47 +25,52 @@ export default function App()
 
 function AppInner()
 {
-  const [domain, setDomain] = useState(null);
+  const [domains, setDomains] = useState([]);
+  const [activeDomain, setActiveDomain] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() =>
   {
-    checkDomain();
+    init();
   }, []);
 
-  const checkDomain = async () =>
+  const init = async () =>
   {
     try
     {
-      const savedDomain = await AsyncStorage.getItem('nexoro_domain');
-      if (savedDomain)
-      {
-        setDomain(savedDomain);
-      }
+      const { list, active } = await loadInstances();
+      setDomains(list);
+      setActiveDomain(active);
     } catch (e)
     {
-      console.error('Failed to load domain', e);
+      console.error('Failed to load instances', e);
     } finally
     {
       setLoading(false);
     }
   };
 
-  const handleDomainSaved = (newDomain) =>
+  // Called from the entry screen and the in-app instance switcher.
+  const handleAddDomain = async (fullDomain) =>
   {
-    setDomain(newDomain);
+    const { list, active } = await addInstance(domains, fullDomain);
+    setDomains(list);
+    setActiveDomain(active);
   };
 
-  const handleChangeDomain = async () =>
+  // Switch the active instance.
+  const handleSelectDomain = async (fullDomain) =>
   {
-    try
-    {
-      await AsyncStorage.removeItem('nexoro_domain');
-      setDomain(null);
-    } catch (e)
-    {
-      console.error('Failed to clear domain', e);
-    }
+    await setActiveInstance(fullDomain);
+    setActiveDomain(fullDomain);
+  };
+
+  // Remove an instance from the cache.
+  const handleRemoveDomain = async (fullDomain) =>
+  {
+    const { list, active } = await removeInstance(domains, fullDomain, activeDomain);
+    setDomains(list);
+    setActiveDomain(active);
   };
 
   if (loading)
@@ -72,12 +83,20 @@ function AppInner()
     );
   }
 
-  if (domain)
+  if (activeDomain)
   {
-    return <WebViewScreen url={domain} onChangeDomain={handleChangeDomain} />;
+    return (
+      <WebViewScreen
+        url={activeDomain}
+        domains={domains}
+        onSelectDomain={handleSelectDomain}
+        onAddDomain={handleAddDomain}
+        onRemoveDomain={handleRemoveDomain}
+      />
+    );
   }
 
-  return <DomainEntryScreen onDomainSaved={handleDomainSaved} />;
+  return <DomainEntryScreen onDomainSaved={handleAddDomain} />;
 }
 
 const styles = StyleSheet.create({

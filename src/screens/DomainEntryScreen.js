@@ -12,9 +12,9 @@ import
     Dimensions,
     Image,
   } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { buildDomain } from '../utils/instances';
 
 const LogoText = require('../../assets/logo-text.png');
 
@@ -50,18 +50,10 @@ export default function DomainEntryScreen({ onDomainSaved })
     setLoading(true);
     try
     {
-      // Clean input: remove spaces, lowercase
-      const cleanSubdomain = subdomain.trim().toLowerCase();
-      const fullDomain = `https://${ cleanSubdomain }.nexoro.net`;
+      const fullDomain = buildDomain(subdomain);
 
-      await AsyncStorage.setItem('nexoro_domain', fullDomain);
-
-      // Simulate a small delay for better UX (optional)
-      setTimeout(() =>
-      {
-        onDomainSaved(fullDomain);
-      }, 500);
-
+      // Persistence is handled by the parent (instances cache).
+      await onDomainSaved(fullDomain);
     } catch (error)
     {
       console.error('Failed to save domain', error);
