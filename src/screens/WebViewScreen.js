@@ -79,6 +79,36 @@ const DISABLE_ZOOM_JS = `
 })();
 `;
 
+// Bridge web → native. Markiert die Seite als "läuft in der App"
+// (Klasse .nexoro-native-app auf <html>, sodass das oms-cluster Menü den
+// Punkt "Instanz wechseln" einblendet) und stellt window.nexoroOpenInstanceSwitcher()
+// bereit, das den nativen Switcher per postMessage öffnet.
+const NATIVE_BRIDGE_JS = `
+(function() {
+  window.NEXORO_NATIVE = true;
+  window.nexoroOpenInstanceSwitcher = function() {
+    try {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'nexoro:open-instance-switcher' }));
+    } catch (e) {}
+  };
+  function flag() {
+    if (document.documentElement) {
+      document.documentElement.classList.add('nexoro-native-app');
+    }
+  }
+  flag();
+  document.addEventListener('DOMContentLoaded', flag);
+})();
+true;
+`;
+
+// Zoom-Lock + App-Bridge zusammen vor und nach dem Laden injizieren, damit
+// SPA-Navigation beides behält.
+const INJECT_ALL = DISABLE_ZOOM_JS + '\n' + NATIVE_BRIDGE_JS;
+
+// Message, die die Webseite schickt, um den Instanz-Switcher zu öffnen.
+const SWITCHER_MESSAGE = 'nexoro:open-instance-switcher';
+
 const COLORS = {
   primary: '#40BCC7',
   background: '#F8FAFC',
@@ -112,12 +142,26 @@ export default function WebViewScreen({
     );
   }
 
-  const displayDomain = toLabel(url);
-
   const openSwitcher = () =>
   {
     setNewSubdomain('');
     setSwitcherVisible(true);
+  };
+
+  // Webseite (oms-cluster Menü "Instanz wechseln") bittet um den Switcher.
+  const handleWebViewMessage = (event) =>
+  {
+    try
+    {
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg && msg.type === SWITCHER_MESSAGE)
+      {
+        openSwitcher();
+      }
+    } catch (e)
+    {
+      // Nicht-JSON-Nachrichten ignorieren.
+    }
   };
 
   const handleSelect = async (domain) =>
@@ -170,30 +214,17 @@ export default function WebViewScreen({
   };
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <View style={[styles.topBarContainer, { paddingTop: insets.top }]}>
-        <View style={styles.topBar}>
-          <Text style={styles.domainText} numberOfLines={1}>
-            {displayDomain}
-          </Text>
-          <TouchableOpacity
-            style={styles.changeButton}
-            onPress={openSwitcher}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.changeButtonText}>Ändern</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
 
       <WebView
         source={{ uri: url }}
         style={styles.webview}
         startInLoadingState={true}
         scalesPageToFit={false}
-        injectedJavaScriptBeforeContentLoaded={DISABLE_ZOOM_JS}
-        injectedJavaScript={DISABLE_ZOOM_JS}
+        injectedJavaScriptBeforeContentLoaded={INJECT_ALL}
+        injectedJavaScript={INJECT_ALL}
+        onMessage={handleWebViewMessage}
         setBuiltInZoomControls={false}
         setDisplayZoomControls={false}
         renderLoading={() => (
@@ -295,40 +326,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  topBarContainer: {
-    backgroundColor: COLORS.card,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    zIndex: 10,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    height: 60,
-  },
-  domainText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    flex: 1,
-    marginRight: 16,
-  },
-  changeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  changeButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.primary,
   },
   webview: {
     flex: 1,
