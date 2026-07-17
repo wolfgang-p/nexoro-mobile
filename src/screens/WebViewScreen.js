@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Linking,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
@@ -109,6 +110,35 @@ const INJECT_ALL = DISABLE_ZOOM_JS + '\n' + NATIVE_BRIDGE_JS;
 // Message, die die Webseite schickt, um den Instanz-Switcher zu öffnen.
 const SWITCHER_MESSAGE = 'nexoro:open-instance-switcher';
 
+// Entscheidet, ob eine URL innerhalb der App (WebView) geöffnet werden soll
+// oder extern (echter Browser / System-Handler). Alles auf einer nexoro.net
+// Subdomain bleibt in der App. tel:/mailto:/etc. gehen an das System, fremde
+// http(s)-Domains öffnen wir bewusst im externen Browser.
+function shouldStayInApp(rawUrl)
+{
+  if (!rawUrl) return false;
+  const lower = rawUrl.toLowerCase();
+  // App-interne Schemata und relative Navigation bleiben immer drin.
+  if (lower.startsWith('about:') || lower.startsWith('data:') || lower.startsWith('blob:'))
+  {
+    return true;
+  }
+  if (lower.startsWith('http://') || lower.startsWith('https://'))
+  {
+    try
+    {
+      const host = lower.split('/')[2] || '';
+      // Eigene Instanzen (…​.nexoro.net) und nexoro.net selbst bleiben in der App.
+      return host === 'nexoro.net' || host.endsWith('.nexoro.net');
+    } catch (e)
+    {
+      return false;
+    }
+  }
+  // Nicht-http(s) Schemata (tel:, mailto:, …) übernimmt das System.
+  return false;
+}
+
 const COLORS = {
   primary: '#40BCC7',
   background: '#F8FAFC',
@@ -128,6 +158,7 @@ export default function WebViewScreen({
 })
 {
   const insets = useSafeAreaInsets();
+  const webViewRef = useRef(null);
   const [switcherVisible, setSwitcherVisible] = useState(false);
   const [newSubdomain, setNewSubdomain] = useState('');
   const [adding, setAdding] = useState(false);
@@ -161,6 +192,47 @@ export default function WebViewScreen({
     } catch (e)
     {
       // Nicht-JSON-Nachrichten ignorieren.
+    }
+  };
+
+  // Fängt Navigationen ab, bevor sie geladen werden. So verhindern wir, dass
+  // Links (auch target="_blank") den externen Browser aufmachen: nexoro-URLs
+  // bleiben in der WebView, alles andere übergeben wir dem System.
+  const handleShouldStartLoad = (request) =>
+  {
+    const targetUrl = request && request.url;
+    if (shouldStayInApp(targetUrl))
+    {
+      return true;
+    }
+    // Externe URLs / tel: / mailto: an den System-Handler geben, aber die
+    // WebView selbst nicht dorthin navigieren lassen.
+    if (targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')
+      || targetUrl.startsWith('tel:') || targetUrl.startsWith('mailto:')))
+    {
+      Linking.openURL(targetUrl).catch(() => {});
+    }
+    return false;
+  };
+
+  // Wird ausgelöst, wenn die Seite window.open() aufruft oder ein Link mit
+  // target="_blank" angeklickt wird. Statt ein neues Fenster / einen Browser
+  // zu öffnen, laden wir die Ziel-URL in derselben WebView nach.
+  const handleOpenWindow = (event) =>
+  {
+    const targetUrl = event && event.nativeEvent && event.nativeEvent.targetUrl;
+    if (!targetUrl) return;
+    if (shouldStayInApp(targetUrl))
+    {
+      if (webViewRef.current)
+      {
+        webViewRef.current.injectJavaScript(
+          `window.location.href = ${ JSON.stringify(targetUrl) }; true;`
+        );
+      }
+    } else
+    {
+      Linking.openURL(targetUrl).catch(() => {});
     }
   };
 
@@ -218,6 +290,7 @@ export default function WebViewScreen({
       <StatusBar style="dark" />
 
       <WebView
+        ref={webViewRef}
         source={{ uri: url }}
         style={styles.webview}
         startInLoadingState={true}
@@ -225,6 +298,10 @@ export default function WebViewScreen({
         injectedJavaScriptBeforeContentLoaded={INJECT_ALL}
         injectedJavaScript={INJECT_ALL}
         onMessage={handleWebViewMessage}
+        onShouldStartLoadWithRequest={handleShouldStartLoad}
+        onOpenWindow={handleOpenWindow}
+        setSupportMultipleWindows={true}
+        javaScriptCanOpenWindowsAutomatically={true}
         setBuiltInZoomControls={false}
         setDisplayZoomControls={false}
         renderLoading={() => (
