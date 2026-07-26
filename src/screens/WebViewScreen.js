@@ -304,6 +304,23 @@ export default function WebViewScreen({
         javaScriptCanOpenWindowsAutomatically={true}
         setBuiltInZoomControls={false}
         setDisplayZoomControls={false}
+        // Persistente Cookies: das oms-cluster setzt beim Login mit
+        // "Anmeldedaten speichern" einen 30-Tage-Cookie `crm_remember`
+        // (HttpOnly, signiert, siehe login.php + layout_header.php).
+        // Ohne diese beiden Props liegen die Cookies der WebView nur im
+        // Speicher und sind nach dem Schließen der App weg — der Nutzer
+        // müsste sich jedes Mal neu anmelden.
+        //   iOS:     sharedCookiesEnabled nutzt den persistenten
+        //            NSHTTPCookieStorage statt eines flüchtigen Stores.
+        //   Android: thirdPartyCookiesEnabled hält den CookieManager aktiv;
+        //            der Flush auf die Platte passiert im RNCWebViewClient
+        //            nach jedem Seiten-Load.
+        sharedCookiesEnabled={true}
+        thirdPartyCookiesEnabled={true}
+        // Cache mitbenutzen, damit die Session-Wiederherstellung auch
+        // offline/bei langsamem Netz nicht in einen Fehler läuft.
+        cacheEnabled={true}
+        incognito={false}
         renderLoading={() => (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
