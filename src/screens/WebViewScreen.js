@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,10 +8,11 @@ import {
   Modal,
   TextInput,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
   Alert,
   Linking,
+  Keyboard,
+  useWindowDimensions,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
@@ -158,10 +159,40 @@ export default function WebViewScreen({
 })
 {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const webViewRef = useRef(null);
   const [switcherVisible, setSwitcherVisible] = useState(false);
   const [newSubdomain, setNewSubdomain] = useState('');
   const [adding, setAdding] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // Tastaturhöhe selbst verfolgen, statt KeyboardAvoidingView zu benutzen:
+  // Das Sheet ist höhenbegrenzt (maxHeight), und ein reines Hochschieben per
+  // padding würde den oberen Teil (Liste) aus dem Bild schieben. Stattdessen
+  // schrumpfen wir das Sheet um die Tastaturhöhe, die Liste gibt dabei nach.
+  useEffect(() =>
+  {
+    // Auf iOS liefert "willShow" die Höhe vor der Animation -> kein Ruckeln.
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) =>
+    {
+      // Android läuft mit softwareKeyboardLayoutMode "resize" (Expo-Default):
+      // Das Fenster wird dort bereits verkleinert, useWindowDimensions liefert
+      // also schon die reduzierte Höhe. Ein zusätzliches Abziehen würde den
+      // Platz doppelt wegnehmen -> nur auf iOS selbst kompensieren.
+      if (Platform.OS !== 'ios') return;
+      setKeyboardHeight(e.endCoordinates ? e.endCoordinates.height : 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+
+    return () =>
+    {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Safe check for URL validity
   if (!url)
@@ -332,22 +363,40 @@ export default function WebViewScreen({
         visible={switcherVisible}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={() => setSwitcherVisible(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
+        <View style={styles.modalOverlay}>
           <TouchableOpacity
             style={styles.backdrop}
             activeOpacity={1}
             onPress={() => setSwitcherVisible(false)}
           />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View
+            style={[
+              styles.sheet,
+              {
+                // Sheet endet immer oberhalb der Tastatur; bei geschlossener
+                // Tastatur bleibt der Safe-Area-Abstand unten erhalten.
+                marginBottom: keyboardHeight,
+                paddingBottom: (keyboardHeight > 0 ? 16 : insets.bottom + 16),
+                maxHeight: Math.max(
+                  240,
+                  (windowHeight - keyboardHeight - insets.top) * 0.92
+                ),
+              },
+            ]}
+          >
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>Instanz wechseln</Text>
 
-            <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={true}
+            >
               {domains.map((domain) =>
               {
                 const isActive = domain === url;
@@ -410,7 +459,7 @@ export default function WebViewScreen({
               </Text>
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );
@@ -455,7 +504,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 12,
-    maxHeight: '80%',
+    // maxHeight wird zur Laufzeit gesetzt (abhängig von der Tastaturhöhe).
   },
   handle: {
     alignSelf: 'center',
@@ -472,8 +521,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   list: {
+    // Die Liste ist der einzige Teil, der nachgeben darf: Titel, Eingabefeld
+    // und Button behalten ihre Höhe, die Liste schrumpft und wird scrollbar.
     flexGrow: 0,
+    flexShrink: 1,
     marginBottom: 8,
+  },
+  listContent: {
+    paddingBottom: 4,
   },
   itemRow: {
     flexDirection: 'row',

@@ -26,7 +26,8 @@
         "foregroundImage": "./assets/logo-new.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "net.nexoro.mobile"
+      "package": "net.nexoro.mobile",
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "favicon": "./assets/favicon.png"
