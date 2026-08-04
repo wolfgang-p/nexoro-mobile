@@ -17,7 +17,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { buildDomain, toLabel } from '../utils/instances';
+import { buildDomain, toLabel, ONBOARDING_URL, APP_UA_MARKER } from '../utils/instances';
 
 // Verhindert sowohl den Pinch-Zoom (zwei Finger) als auch den automatischen
 // Zoom, den iOS beim Fokussieren eines Input-Feldes auslöst. Wird vor dem
@@ -111,6 +111,11 @@ const INJECT_ALL = DISABLE_ZOOM_JS + '\n' + NATIVE_BRIDGE_JS;
 // Message, die die Webseite schickt, um den Instanz-Switcher zu öffnen.
 const SWITCHER_MESSAGE = 'nexoro:open-instance-switcher';
 
+// Message des Onboarding-Funnels, sobald eine Instanz fertig provisioniert ist.
+// Gegenstück: notifyNativeInstanceCreated() in oms-cluster
+// onboarding-wizard/wizard.js.
+const CREATED_MESSAGE = 'nexoro:instance-created';
+
 // Entscheidet, ob eine URL innerhalb der App (WebView) geöffnet werden soll
 // oder extern (echter Browser / System-Handler). Alles auf einer nexoro.net
 // Subdomain bleibt in der App. tel:/mailto:/etc. gehen an das System, fremde
@@ -150,6 +155,56 @@ const COLORS = {
   error: '#EF4444',
 };
 
+/**
+ * Vollbild-Modal mit dem öffentlichen Onboarding-Funnel.
+ *
+ * Eigene WebView statt Navigation der Haupt-WebView: die aktive Instanz bleibt
+ * dahinter im Zustand (eingeloggt, Scrollposition), und ein Abbruch führt
+ * garantiert dorthin zurück. Der UA-Marker muss auch hier gesetzt sein, sonst
+ * leitet der app-only Host auf nexoro.net um.
+ */
+export function OnboardingModal({ visible, onClose, onMessage, insets })
+{
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={[styles.onbContainer, { paddingTop: insets.top }]}>
+        <View style={styles.onbHeader}>
+          <Text style={styles.onbTitle}>Neue Instanz</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.onbClose}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.onbCloseText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <WebView
+          source={{ uri: ONBOARDING_URL }}
+          style={styles.webview}
+          startInLoadingState={true}
+          applicationNameForUserAgent={APP_UA_MARKER}
+          onMessage={onMessage}
+          injectedJavaScriptBeforeContentLoaded={DISABLE_ZOOM_JS}
+          // Der Funnel ist bereits mobil ausgelegt; nur der Zoom-Lock wird
+          // gebraucht, nicht die Instanz-Switcher-Bridge.
+          setBuiltInZoomControls={false}
+          setDisplayZoomControls={false}
+          renderLoading={() => (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+            </View>
+          )}
+        />
+      </View>
+    </Modal>
+  );
+}
+
 export default function WebViewScreen({
   url,
   domains = [],
@@ -162,6 +217,7 @@ export default function WebViewScreen({
   const { height: windowHeight } = useWindowDimensions();
   const webViewRef = useRef(null);
   const [switcherVisible, setSwitcherVisible] = useState(false);
+  const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [newSubdomain, setNewSubdomain] = useState('');
   const [adding, setAdding] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -210,6 +266,33 @@ export default function WebViewScreen({
     setSwitcherVisible(true);
   };
 
+  // Onboarding-Funnel in derselben WebView öffnen. Der Host ist app-only; der
+  // UA-Marker (applicationNameForUserAgent) reist bei jedem Request mit, auch
+  // bei der Navigation innerhalb des Funnels.
+  const openOnboarding = () =>
+  {
+    setSwitcherVisible(false);
+    setOnboardingVisible(true);
+  };
+
+  // Funnel meldet eine fertige Instanz -> speichern, aktiv setzen, Funnel zu.
+  // addInstance() ist idempotent und macht die neue Instanz automatisch aktiv,
+  // die App rendert danach direkt deren WebView.
+  const handleInstanceCreated = async (msg) =>
+  {
+    const domain = msg && (msg.url || (msg.domain ? `https://${ msg.domain }` : null));
+    if (!domain) return;
+    setOnboardingVisible(false);
+    try
+    {
+      await onAddDomain(domain);
+    } catch (e)
+    {
+      console.error('Failed to add created instance', e);
+      Alert.alert('Fehler', 'Die neue Instanz konnte nicht gespeichert werden.');
+    }
+  };
+
   // Webseite (oms-cluster Menü "Instanz wechseln") bittet um den Switcher.
   const handleWebViewMessage = (event) =>
   {
@@ -219,6 +302,9 @@ export default function WebViewScreen({
       if (msg && msg.type === SWITCHER_MESSAGE)
       {
         openSwitcher();
+      } else if (msg && msg.type === CREATED_MESSAGE)
+      {
+        handleInstanceCreated(msg);
       }
     } catch (e)
     {
@@ -331,6 +417,9 @@ export default function WebViewScreen({
         onMessage={handleWebViewMessage}
         onShouldStartLoadWithRequest={handleShouldStartLoad}
         onOpenWindow={handleOpenWindow}
+        // Hängt "NexoroApp/x.y" an die normale WebView-UA an (ersetzt sie nicht).
+        // Der Onboarding-Host ist app-only und prüft genau diesen Marker.
+        applicationNameForUserAgent={APP_UA_MARKER}
         setSupportMultipleWindows={true}
         javaScriptCanOpenWindowsAutomatically={true}
         setBuiltInZoomControls={false}
@@ -458,9 +547,31 @@ export default function WebViewScreen({
                 {adding ? 'Hinzufügen...' : 'Hinzufügen'}
               </Text>
             </TouchableOpacity>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>oder</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={openOnboarding}
+              activeOpacity={0.8}
+              disabled={adding}
+            >
+              <Text style={styles.createButtonText}>Neue Instanz erstellen</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      <OnboardingModal
+        visible={onboardingVisible}
+        onClose={() => setOnboardingVisible(false)}
+        onMessage={handleWebViewMessage}
+        insets={insets}
+      />
     </View>
   );
 }
@@ -638,5 +749,70 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  // --- "oder" Trenner + Neue-Instanz-Button -------------------------------
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 18,
+    marginBottom: 14,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.subtext,
+  },
+  createButton: {
+    width: '100%',
+    height: 56,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+
+  // --- Onboarding-Vollbild-Modal -------------------------------------------
+  onbContainer: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+  },
+  onbHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  onbTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  onbClose: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onbCloseText: {
+    fontSize: 20,
+    color: COLORS.subtext,
+    fontWeight: '600',
   },
 });

@@ -6,6 +6,15 @@ const LIST_KEY = 'nexoro_domains';  // JSON array of full domains (all added ins
 
 const SUFFIX = '.nexoro.net';
 
+// Öffentlicher Onboarding-Funnel. Serverseitig ist der Host app-only: ohne den
+// UA-Marker (bzw. den X-Nexoro-App-Header) leitet er auf https://nexoro.net um.
+// Siehe oms-cluster includes/nexoro_admin_gate.php.
+export const ONBOARDING_URL = 'https://onboarding.nexoro.net/';
+
+// Wird an die WebView-User-Agent angehängt (applicationNameForUserAgent), damit
+// der Funnel die App erkennt. Muss zu nexoro_app_marker() im oms-cluster passen.
+export const APP_UA_MARKER = 'NexoroApp/1.0';
+
 // Build a full domain URL from a raw subdomain input.
 export function buildDomain(subdomain)
 {

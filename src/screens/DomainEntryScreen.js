@@ -15,6 +15,7 @@ import
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { buildDomain } from '../utils/instances';
+import { OnboardingModal } from './WebViewScreen';
 
 const LogoText = require('../../assets/logo-text.png');
 
@@ -37,7 +38,37 @@ export default function DomainEntryScreen({ onDomainSaved })
 {
   const [subdomain, setSubdomain] = useState('');
   const [loading, setLoading] = useState(false);
+  const [onboardingVisible, setOnboardingVisible] = useState(false);
   const insets = useSafeAreaInsets();
+
+  // Der Funnel meldet die fertige Instanz per postMessage. Speichern + aktiv
+  // setzen übernimmt der Parent (onDomainSaved -> addInstance), danach rendert
+  // App.js direkt die WebView der neuen Instanz.
+  const handleOnboardingMessage = async (event) =>
+  {
+    let msg;
+    try
+    {
+      msg = JSON.parse(event.nativeEvent.data);
+    } catch (e)
+    {
+      return; // Nicht-JSON ignorieren.
+    }
+    if (!msg || msg.type !== 'nexoro:instance-created') return;
+
+    const fullDomain = msg.url || (msg.domain ? `https://${ msg.domain }` : null);
+    if (!fullDomain) return;
+
+    setOnboardingVisible(false);
+    try
+    {
+      await onDomainSaved(fullDomain);
+    } catch (e)
+    {
+      console.error('Failed to save created instance', e);
+      Alert.alert('Fehler', 'Die neue Instanz konnte nicht gespeichert werden.');
+    }
+  };
 
   const handleSave = async () =>
   {
@@ -112,8 +143,34 @@ export default function DomainEntryScreen({ onDomainSaved })
               {loading ? 'Speichern...' : 'Weiter'}
             </Text>
           </TouchableOpacity>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>oder</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => setOnboardingVisible(true)}
+            activeOpacity={0.8}
+            disabled={loading}
+          >
+            <Text style={styles.createButtonText}>Neue Instanz erstellen</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.createHint}>
+            Noch kein Nexoro? Richten Sie Ihre Instanz in wenigen Minuten ein.
+          </Text>
         </View>
       </KeyboardAvoidingView>
+
+      <OnboardingModal
+        visible={onboardingVisible}
+        onClose={() => setOnboardingVisible(false)}
+        onMessage={handleOnboardingMessage}
+        insets={insets}
+      />
     </View>
   );
 }
@@ -223,5 +280,42 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.subtext,
+  },
+  createButton: {
+    width: '100%',
+    height: 56,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  createHint: {
+    fontSize: 13,
+    color: COLORS.subtext,
+    textAlign: 'center',
+    marginTop: 12,
   },
 });
