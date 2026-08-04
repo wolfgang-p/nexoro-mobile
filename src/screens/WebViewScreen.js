@@ -174,7 +174,7 @@ export function OnboardingModal({ visible, onClose, onMessage, insets })
     >
       <View style={[styles.onbContainer, { paddingTop: insets.top }]}>
         <View style={styles.onbHeader}>
-          <Text style={styles.onbTitle}>Neue Instanz</Text>
+          <Text style={styles.onbTitle}>Neue Instanz erstellen</Text>
           <TouchableOpacity
             onPress={onClose}
             style={styles.onbClose}
