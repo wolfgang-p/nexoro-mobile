@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useInstanceStore } from '../stores/instanceStore';
 import { ActiveMeetingBar } from '../components/meet/ActiveMeetingBar';
+import { useMeetingDeepLinks } from '../lib/meet/deepLinks';
 
 const COLORS = { primary: '#40BCC7', background: '#F8FAFC' };
 
@@ -26,6 +27,9 @@ export default function RootLayout()
 
   useEffect(() => { init(); }, [init]);
 
+  // meet.nexoro.net/m/<id> öffnet den Beitritts-Ablauf statt des Browsers.
+  useMeetingDeepLinks();
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
@@ -43,12 +47,21 @@ export default function RootLayout()
               }}
             >
               <Stack.Screen name="index" />
+              <Stack.Screen name="meet/index" />
+              <Stack.Screen name="meet/new" />
+              <Stack.Screen name="meet/join/[id]" />
               {/* Meeting-Räume kommen von unten und liegen über allem — der
                   Raum ist Vollbild und kehrt per Zurück-Pfeil nach Nexoro
-                  zurück, ohne die WebView darunter neu zu laden. */}
+                  zurück, ohne die WebView darunter neu zu laden. Die Wisch-
+                  Geste ist deaktiviert, damit man nicht versehentlich aus
+                  einem laufenden Meeting rutscht. */}
               <Stack.Screen
-                name="meet/room/[id]"
+                name="meet/room/[id]/index"
                 options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+              />
+              <Stack.Screen
+                name="meet/room/[id]/more"
+                options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
               />
             </Stack>
             <ActiveMeetingBar />

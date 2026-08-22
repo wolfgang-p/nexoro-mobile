@@ -17,7 +17,9 @@ import {
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { buildDomain, toLabel, ONBOARDING_URL, APP_UA_MARKER } from '../utils/instances';
+import { parseMeetingUrl } from '../../lib/meet/deepLinks';
 
 // Verhindert sowohl den Pinch-Zoom (zwei Finger) als auch den automatischen
 // Zoom, den iOS beim Fokussieren eines Input-Feldes auslöst. Wird vor dem
@@ -93,6 +95,14 @@ const NATIVE_BRIDGE_JS = `
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'nexoro:open-instance-switcher' }));
     } catch (e) {}
   };
+  // Meetings laufen nativ in der App statt als Weiterleitung auf
+  // meet.nexoro.net. Das oms-cluster-Menue ruft diese Funktion auf, wenn es
+  // die Klasse .nexoro-native-app am <html> sieht.
+  window.nexoroOpenMeetings = function() {
+    try {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'nexoro:open-meetings' }));
+    } catch (e) {}
+  };
   function flag() {
     if (document.documentElement) {
       document.documentElement.classList.add('nexoro-native-app');
@@ -115,6 +125,10 @@ const SWITCHER_MESSAGE = 'nexoro:open-instance-switcher';
 // Gegenstück: notifyNativeInstanceCreated() in oms-cluster
 // onboarding-wizard/wizard.js.
 const CREATED_MESSAGE = 'nexoro:instance-created';
+
+// Message, die die Webseite schickt, um die native Meeting-Oberflaeche zu
+// oeffnen (Menuepunkt "Meetings").
+const MEETINGS_MESSAGE = 'nexoro:open-meetings';
 
 // Entscheidet, ob eine URL innerhalb der App (WebView) geöffnet werden soll
 // oder extern (echter Browser / System-Handler). Alles auf einer nexoro.net
@@ -214,6 +228,7 @@ export default function WebViewScreen({
 })
 {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
   const webViewRef = useRef(null);
   const [switcherVisible, setSwitcherVisible] = useState(false);
@@ -305,6 +320,10 @@ export default function WebViewScreen({
       } else if (msg && msg.type === CREATED_MESSAGE)
       {
         handleInstanceCreated(msg);
+      } else if (msg && msg.type === MEETINGS_MESSAGE)
+      {
+        // Menuepunkt "Meetings" -> native Uebersicht, kein Browser-Wechsel.
+        router.push('/meet');
       }
     } catch (e)
     {
@@ -318,6 +337,23 @@ export default function WebViewScreen({
   const handleShouldStartLoad = (request) =>
   {
     const targetUrl = request && request.url;
+
+    // Meeting-Links nativ oeffnen statt im Browser. Betrifft sowohl den
+    // Menuepunkt (falls das oms-cluster noch die alte target="_blank"-Variante
+    // ausliefert) als auch jeden Meeting-Link, der irgendwo im CRM steht.
+    const roomId = parseMeetingUrl(targetUrl);
+    if (roomId)
+    {
+      router.push(`/meet/join/${ encodeURIComponent(roomId) }`);
+      return false;
+    }
+    // Das Meet-Dashboard fuehrt in der App zur nativen Uebersicht.
+    if (targetUrl && /^https?:\/\/meet\.nexoro\.net(\/(dashboard|new|join)?)?(\?|#|$)/i.test(targetUrl))
+    {
+      router.push('/meet');
+      return false;
+    }
+
     if (shouldStayInApp(targetUrl))
     {
       return true;
@@ -339,6 +375,21 @@ export default function WebViewScreen({
   {
     const targetUrl = event && event.nativeEvent && event.nativeEvent.targetUrl;
     if (!targetUrl) return;
+
+    // Der Menuepunkt "Meetings" ist ein target="_blank"-Link. Ohne diese
+    // Abzweigung landet er im externen Browser statt in der nativen Ansicht.
+    const roomId = parseMeetingUrl(targetUrl);
+    if (roomId)
+    {
+      router.push(`/meet/join/${ encodeURIComponent(roomId) }`);
+      return;
+    }
+    if (/^https?:\/\/meet\.nexoro\.net/i.test(targetUrl))
+    {
+      router.push('/meet');
+      return;
+    }
+
     if (shouldStayInApp(targetUrl))
     {
       if (webViewRef.current)
