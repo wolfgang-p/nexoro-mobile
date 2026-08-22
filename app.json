@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo-new.png",
+    "scheme": "nexoro",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
@@ -14,11 +15,25 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "@config-plugins/react-native-webrtc"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.nexoro.mobile",
+      "associatedDomains": [
+        "applinks:meet.nexoro.net"
+      ],
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Nexoro benötigt Zugriff auf die Kamera, damit Sie in Meetings Ihr Video übertragen können.",
+        "NSMicrophoneUsageDescription": "Nexoro benötigt Zugriff auf das Mikrofon, damit Sie in Meetings sprechen können.",
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ]
       }
     },
     "android": {
@@ -27,10 +42,36 @@
         "backgroundColor": "#ffffff"
       },
       "package": "net.nexoro.mobile",
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "meet.nexoro.net",
+              "pathPrefix": "/m"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
     },
     "extra": {
       "eas": {
