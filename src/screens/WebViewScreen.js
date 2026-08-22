@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { buildDomain, toLabel, ONBOARDING_URL, APP_UA_MARKER } from '../utils/instances';
 import { parseMeetingUrl } from '../../lib/meet/deepLinks';
+import { useMeetStore, isMeetingLive } from '../../stores/meetStore';
 
 // Verhindert sowohl den Pinch-Zoom (zwei Finger) als auch den automatischen
 // Zoom, den iOS beim Fokussieren eines Input-Feldes auslöst. Wird vor dem
@@ -229,6 +230,11 @@ export default function WebViewScreen({
 {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  // Laeuft ein Meeting im Hintergrund, sitzt die Meeting-Leiste ueber dieser
+  // Ansicht und traegt den oberen Safe-Area-Abstand bereits. Wuerden wir ihn
+  // hier nochmals setzen, entstuende ein doppelter Rand.
+  const meetPhase = useMeetStore((s) => s.phase);
+  const meetLive = isMeetingLive({ phase: meetPhase });
   const { height: windowHeight } = useWindowDimensions();
   const webViewRef = useRef(null);
   const [switcherVisible, setSwitcherVisible] = useState(false);
@@ -454,7 +460,7 @@ export default function WebViewScreen({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[styles.container, { paddingTop: meetLive ? 0 : insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
 
       <WebView

@@ -5,12 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useMeetStore, isMeetingLive } from '../../stores/meetStore';
+import { dark } from '../../lib/meet/theme';
 import { meetManager } from '../../lib/meet/meetManager';
 
 const BRAND = '#40BCC7';
 
 /**
- * Leiste für das minimierte Meeting, oben über der App.
+ * Leiste für das minimierte Meeting, oben in der App.
  *
  * Sichtbar, sobald ein Meeting läuft und der Raum-Screen nicht im Vordergrund
  * ist — egal ob der Nutzer bewusst minimiert oder einfach zurücknavigiert hat.
@@ -18,8 +19,11 @@ const BRAND = '#40BCC7';
  * lebt außerhalb der Screens weiter, hier hängen nur Anzeige und zwei
  * Schnellzugriffe (Mikro, Auflegen) dran.
  *
- * Vorbild ist die erprobte ActiveCallBanner aus nexora-mobile — gleiche Geste,
- * gleiche Position, damit sich Koro und Nexoro gleich anfühlen.
+ * WICHTIG — die Leiste liegt im normalen Layoutfluss, NICHT absolut darüber.
+ * Als Overlay verdeckte sie die obere Navigation des oms-cluster in der
+ * WebView. Der Inhalt darunter muss stattdessen SCHRUMPFEN, damit Kopf- und
+ * Fußzeile der Webseite sichtbar bleiben. Deshalb rendert das Wurzel-Layout
+ * die Leiste als Geschwisterelement über dem Stack und nicht darüberliegend.
  */
 export function ActiveMeetingBar()
 {
@@ -49,15 +53,17 @@ export function ActiveMeetingBar()
   const live = isMeetingLive({ phase });
   const visible = live && !onRoomScreen;
 
-  const slide = useRef(new Animated.Value(-90)).current;
+  // Einblenden statt Hereinschieben: im Layoutfluss würde ein Slide die
+  // darunterliegende WebView bei jedem Frame neu umbrechen.
+  const fade = useRef(new Animated.Value(0)).current;
   useEffect(() =>
   {
-    Animated.timing(slide, {
-      toValue: visible ? 0 : -90,
-      duration: 220,
+    Animated.timing(fade, {
+      toValue: visible ? 1 : 0,
+      duration: 180,
       useNativeDriver: true,
     }).start();
-  }, [visible, slide]);
+  }, [visible, fade]);
 
   if (!visible) return null;
 
@@ -74,10 +80,9 @@ export function ActiveMeetingBar()
 
   return (
     <Animated.View
-      pointerEvents="box-none"
       style={{
-        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 999,
-        transform: [{ translateY: slide }],
+        backgroundColor: dark.bg,
+        opacity: fade,
       }}
     >
       <Pressable
@@ -86,6 +91,7 @@ export function ActiveMeetingBar()
         accessibilityLabel="Zurück zum Meeting"
         style={{
           marginTop: insets.top + 4,
+          marginBottom: 4,
           marginHorizontal: 10,
           paddingLeft: 14, paddingRight: 8, paddingVertical: 8,
           borderRadius: 16,

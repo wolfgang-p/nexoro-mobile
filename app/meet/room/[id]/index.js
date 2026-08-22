@@ -113,9 +113,10 @@ export default function MeetingRoom()
 
   const remoteList = useMemo(() => Array.from(remotes.values()), [remotes]);
 
-  // Teilt jemand den Bildschirm, hat der Vorrang vor dem Raster.
-  const sharer = useMemo(
-    () => remoteList.find((r) => r.screen_sharing && r.screenStreamUrl),
+  // ALLE laufenden Bildschirmfreigaben, nicht nur die erste. Teilen zwei
+  // Personen gleichzeitig, sollen auch beide sichtbar sein.
+  const sharers = useMemo(
+    () => remoteList.filter((r) => r.screen_sharing && r.screenStreamUrl),
     [remoteList],
   );
 
@@ -125,6 +126,49 @@ export default function MeetingRoom()
   );
 
   const hiddenCount = Math.max(0, remoteList.length - visible.length);
+
+  // Angetippte Kachel im Vollbild. Als Kennung statt als Objekt, damit der
+  // Inhalt bei jedem Renderdurchlauf frisch aus dem Store kommt — sonst würde
+  // das Vollbild einen eingefrorenen Schnappschuss zeigen.
+  const [fullscreen, setFullscreen] = useState(null); // { deviceId, kind }
+
+  const fullscreenTile = useMemo(() =>
+  {
+    if (!fullscreen) return null;
+    if (fullscreen.deviceId === 'self')
+    {
+      return {
+        streamUrl: localStreamUrl, name: 'Du', label: 'Du',
+        cameraOn, micOn, mirror: true, conn: 'connected', objectFit: 'cover',
+      };
+    }
+    const r = remotes.get(fullscreen.deviceId);
+    if (!r) return null;
+    if (fullscreen.kind === 'screen')
+    {
+      if (!r.screenStreamUrl) return null;
+      return {
+        streamUrl: r.screenStreamUrl,
+        name: `${ r.display_name } teilt den Bildschirm`,
+        label: `${ r.display_name } teilt den Bildschirm`,
+        cameraOn: true, micOn: r.mic_on, conn: r.conn,
+        // Bildschirme nie beschneiden — sonst fehlen Ränder mit Inhalt.
+        objectFit: 'contain',
+      };
+    }
+    return {
+      streamUrl: r.streamUrl, name: r.display_name, isHost: r.is_host,
+      cameraOn: r.camera_on, micOn: r.mic_on, conn: r.conn,
+      speaking: speaking.has(r.device_id), handUp: !!handsUp[r.device_id],
+      objectFit: 'cover',
+    };
+  }, [fullscreen, remotes, localStreamUrl, cameraOn, micOn, speaking, handsUp]);
+
+  // Verlässt die Quelle das Meeting (oder endet die Freigabe), Vollbild schließen.
+  useEffect(() =>
+  {
+    if (fullscreen && !fullscreenTile) setFullscreen(null);
+  }, [fullscreen, fullscreenTile]);
 
   if (phase === 'idle')
   {
@@ -198,15 +242,16 @@ export default function MeetingRoom()
               </View>
             )}
 
-            {sharer ? (
+            {sharers.length > 0 ? (
               <ScreenShareStage
-                sharer={sharer}
-                others={visible.filter((r) => r.device_id !== sharer.device_id)}
+                sharers={sharers}
+                others={visible.filter((r) => !sharers.some((s2) => s2.device_id === r.device_id))}
                 speaking={speaking}
                 handsUp={handsUp}
                 localStreamUrl={localStreamUrl}
                 cameraOn={cameraOn}
                 micOn={micOn}
+                onOpen={setFullscreen}
               />
             ) : (
               <Grid
@@ -217,10 +262,30 @@ export default function MeetingRoom()
                 cameraOn={cameraOn}
                 micOn={micOn}
                 hiddenCount={hiddenCount}
+                onOpen={setFullscreen}
               />
             )}
           </View>
         )}
+
+      {/* Vollbild einer angetippten Kachel. Liegt über der Bühne, aber UNTER
+          nichts — die Steuerleiste bleibt darunter bedienbar, damit man auch im
+          Vollbild stummschalten oder auflegen kann. */}
+      {fullscreenTile && (
+        <Pressable
+          style={[styles.fullscreen, { paddingTop: insets.top }]}
+          onPress={() => setFullscreen(null)}
+        >
+          <VideoTile {...fullscreenTile} style={styles.fullscreenTile} />
+          <Pressable
+            onPress={() => setFullscreen(null)}
+            hitSlop={10}
+            style={[styles.fullscreenClose, { top: insets.top + 8 }]}
+          >
+            <Ionicons name="contract" size={22} color={dark.text} />
+          </Pressable>
+        </Pressable>
+      )}
 
       {/* Steuerleiste */}
       <View style={[styles.controls, { paddingBottom: insets.bottom + 10 }]}>
@@ -269,34 +334,27 @@ export default function MeetingRoom()
 // ── Bühnen-Varianten ────────────────────────────────────────────────
 
 /** Raster mit bis zu vier Kacheln — die eigene immer zuerst. */
-function Grid({ visible, speaking, handsUp, localStreamUrl, cameraOn, micOn, hiddenCount })
+function Grid({ visible, speaking, handsUp, localStreamUrl, cameraOn, micOn, hiddenCount, onOpen })
 {
   const tiles = [
-    <VideoTile
-      key="self"
-      streamUrl={localStreamUrl}
-      name="Du"
-      label="Du"
-      cameraOn={cameraOn}
-      micOn={micOn}
-      mirror
-      conn="connected"
-      style={styles.gridTile}
-    />,
-    ...visible.map((r) => (
-      <VideoTile
-        key={r.device_id}
-        streamUrl={r.streamUrl}
-        name={r.display_name}
-        isHost={r.is_host}
-        cameraOn={r.camera_on}
-        micOn={r.mic_on}
-        speaking={speaking.has(r.device_id)}
-        handUp={!!handsUp[r.device_id]}
-        conn={r.conn}
-        style={styles.gridTile}
-      />
-    )),
+    {
+      key: 'self',
+      open: { deviceId: 'self', kind: 'camera' },
+      props: {
+        streamUrl: localStreamUrl, name: 'Du', label: 'Du',
+        cameraOn, micOn, mirror: true, conn: 'connected',
+      },
+    },
+    ...visible.map((r) => ({
+      key: r.device_id,
+      open: { deviceId: r.device_id, kind: 'camera' },
+      props: {
+        streamUrl: r.streamUrl, name: r.display_name, isHost: r.is_host,
+        cameraOn: r.camera_on, micOn: r.mic_on,
+        speaking: speaking.has(r.device_id), handUp: !!handsUp[r.device_id],
+        conn: r.conn,
+      },
+    })),
   ];
 
   // Bei zwei Kacheln untereinander, sonst zweispaltig — so bleiben die Bilder
@@ -306,10 +364,14 @@ function Grid({ visible, speaking, handsUp, localStreamUrl, cameraOn, micOn, hid
   return (
     <View style={styles.gridWrap}>
       <View style={[styles.grid, twoUp && styles.gridColumn]}>
-        {tiles.map((t, i) => (
-          <View key={i} style={twoUp ? styles.gridCellFull : styles.gridCellHalf}>
-            {t}
-          </View>
+        {tiles.map((t) => (
+          <Pressable
+            key={t.key}
+            onPress={() => onOpen(t.open)}
+            style={twoUp ? styles.gridCellFull : styles.gridCellHalf}
+          >
+            <VideoTile {...t.props} style={styles.gridTile} />
+          </Pressable>
         ))}
       </View>
       {hiddenCount > 0 && (
@@ -319,56 +381,71 @@ function Grid({ visible, speaking, handsUp, localStreamUrl, cameraOn, micOn, hid
   );
 }
 
-/** Bildschirmfreigabe groß, Personen als Streifen darunter. */
-function ScreenShareStage({ sharer, others, speaking, handsUp, localStreamUrl, cameraOn, micOn })
+/**
+ * Bildschirmfreigabe(n) groß, Personen als Streifen darunter.
+ *
+ * Teilen mehrere gleichzeitig, werden alle gezeigt — untereinander, damit jede
+ * Freigabe die volle Breite behält. Lesbarkeit geht hier vor Kachelgröße:
+ * geteilte Bildschirme enthalten meist Text.
+ */
+function ScreenShareStage({ sharers, others, speaking, handsUp, localStreamUrl, cameraOn, micOn, onOpen })
 {
   return (
     <View style={styles.shareWrap}>
-      <VideoTile
-        streamUrl={sharer.screenStreamUrl}
-        name={`${ sharer.display_name } teilt den Bildschirm`}
-        label={`${ sharer.display_name } teilt den Bildschirm`}
-        cameraOn
-        micOn={sharer.mic_on}
-        conn={sharer.conn}
-        objectFit="contain"
-        style={styles.shareMain}
-      />
+      <View style={styles.shareMainWrap}>
+        {sharers.map((sh) => (
+          <Pressable
+            key={`screen-${ sh.device_id }`}
+            onPress={() => onOpen({ deviceId: sh.device_id, kind: 'screen' })}
+            style={styles.shareMainCell}
+          >
+            <VideoTile
+              streamUrl={sh.screenStreamUrl}
+              name={`${ sh.display_name } teilt den Bildschirm`}
+              label={`${ sh.display_name } teilt den Bildschirm`}
+              cameraOn
+              micOn={sh.mic_on}
+              conn={sh.conn}
+              objectFit="contain"
+              style={styles.shareMain}
+            />
+          </Pressable>
+        ))}
+      </View>
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-        <VideoTile
-          streamUrl={localStreamUrl}
-          name="Du"
-          label="Du"
-          cameraOn={cameraOn}
-          micOn={micOn}
-          mirror
-          conn="connected"
-          style={styles.stripTile}
-        />
-        <VideoTile
-          streamUrl={sharer.streamUrl}
-          name={sharer.display_name}
-          isHost={sharer.is_host}
-          cameraOn={sharer.camera_on}
-          micOn={sharer.mic_on}
-          speaking={speaking.has(sharer.device_id)}
-          handUp={!!handsUp[sharer.device_id]}
-          conn={sharer.conn}
-          style={styles.stripTile}
-        />
-        {others.map((r) => (
+        <Pressable onPress={() => onOpen({ deviceId: 'self', kind: 'camera' })}>
           <VideoTile
-            key={r.device_id}
-            streamUrl={r.streamUrl}
-            name={r.display_name}
-            isHost={r.is_host}
-            cameraOn={r.camera_on}
-            micOn={r.mic_on}
-            speaking={speaking.has(r.device_id)}
-            handUp={!!handsUp[r.device_id]}
-            conn={r.conn}
+            streamUrl={localStreamUrl}
+            name="Du"
+            label="Du"
+            cameraOn={cameraOn}
+            micOn={micOn}
+            mirror
+            conn="connected"
             style={styles.stripTile}
           />
+        </Pressable>
+
+        {/* Auch die Teilenden selbst als Kamerakachel — sonst sieht man den
+            Bildschirm, aber nicht die Person dahinter. */}
+        {[...sharers, ...others].map((r) => (
+          <Pressable
+            key={r.device_id}
+            onPress={() => onOpen({ deviceId: r.device_id, kind: 'camera' })}
+          >
+            <VideoTile
+              streamUrl={r.streamUrl}
+              name={r.display_name}
+              isHost={r.is_host}
+              cameraOn={r.camera_on}
+              micOn={r.mic_on}
+              speaking={speaking.has(r.device_id)}
+              handUp={!!handsUp[r.device_id]}
+              conn={r.conn}
+              style={styles.stripTile}
+            />
+          </Pressable>
         ))}
       </ScrollView>
     </View>
@@ -493,6 +570,10 @@ const styles = StyleSheet.create({
   },
 
   shareWrap: { flex: 1, paddingHorizontal: 8, gap: 8 },
+  // Mehrere Freigaben untereinander: geteilte Bildschirme enthalten meist Text,
+  // volle Breite ist wichtiger als eine gleichmässige Kachelgröße.
+  shareMainWrap: { flex: 1, gap: 8 },
+  shareMainCell: { flex: 1 },
   shareMain: { flex: 1 },
   strip: { gap: 8, paddingBottom: 6 },
   stripTile: { width: 108, height: 80, flex: 0 },
@@ -510,6 +591,20 @@ const styles = StyleSheet.create({
   },
   personAvatarText: { color: dark.text, fontWeight: '700', fontSize: 14 },
   personName: { color: dark.text, fontSize: 14, fontWeight: '600' },
+
+  fullscreen: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    zIndex: 20,
+    padding: 6,
+  },
+  fullscreenTile: { flex: 1 },
+  fullscreenClose: {
+    position: 'absolute', right: 14,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   controls: {
     flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start',

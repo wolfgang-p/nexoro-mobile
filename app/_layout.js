@@ -39,7 +39,12 @@ export default function RootLayout()
             <ActivityIndicator size="large" color={COLORS.primary} />
           </View>
         ) : (
-          <>
+          /* Die Meeting-Leiste steht ÜBER dem Stack im Layoutfluss (Spalte),
+             nicht als Overlay darüber. Dadurch schrumpft der Bereich darunter,
+             statt verdeckt zu werden — die obere Navigation und die Fußzeile
+             des oms-cluster bleiben in der WebView sichtbar. */
+          <View style={{ flex: 1 }}>
+            <ActiveMeetingBar />
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -64,8 +69,7 @@ export default function RootLayout()
                 options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
               />
             </Stack>
-            <ActiveMeetingBar />
-          </>
+          </View>
         )}
       </SafeAreaProvider>
     </GestureHandlerRootView>

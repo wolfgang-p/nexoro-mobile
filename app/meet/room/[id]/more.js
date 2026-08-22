@@ -239,6 +239,23 @@ function NotesTab({ insets })
     if (Date.now() - editingRef.current > 800) setDraft(notes);
   }, [notes]);
 
+  // Beim Öffnen des Tabs den Serverstand nachladen. Der Beitritt holt die
+  // Notizen zwar bereits, aber jemand kann in der Zwischenzeit über den Browser
+  // geschrieben haben, ohne dass ein Broadcast bei uns ankam (etwa weil der WS
+  // kurz weg war). Der lokale Entwurf gewinnt, solange gerade getippt wird.
+  useEffect(() =>
+  {
+    let cancelled = false;
+    meetManager.loadNotes()
+      .then((content) =>
+      {
+        if (cancelled || typeof content !== 'string') return;
+        if (Date.now() - editingRef.current > 800) setDraft(content);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const onChange = useCallback((text) =>
   {
     setDraft(text);
