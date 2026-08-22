@@ -32,8 +32,7 @@
         "NSCameraUsageDescription": "Nexoro benötigt Zugriff auf die Kamera, damit Sie in Meetings Ihr Video übertragen können.",
         "NSMicrophoneUsageDescription": "Nexoro benötigt Zugriff auf das Mikrofon, damit Sie in Meetings sprechen können.",
         "UIBackgroundModes": [
-          "audio",
-          "voip"
+          "audio"
         ]
       }
     },
