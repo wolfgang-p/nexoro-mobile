@@ -28,6 +28,7 @@ import
   } from '../../lib/push';
 import { bauScheinSkript, loeseScheinEin, loescheSipZugang, holeSipZugang } from '../../lib/phone/sipZugang';
 import { phoneManager } from '../../lib/phone/phoneManager';
+import { usePhoneStore } from '../../stores/phoneStore';
 
 // Verhindert sowohl den Pinch-Zoom (zwei Finger) als auch den automatischen
 // Zoom, den iOS beim Fokussieren eines Input-Feldes auslöst. Wird vor dem
@@ -290,6 +291,18 @@ export default function WebViewScreen({
     return () => { abgebrochen = true; };
   }, []);
 
+  // Eingehender Anruf: den Telefon-Bildschirm oeffnen.
+  //
+  // CallKit zeigt zwar die Systemoberflaeche, aber nur auf iOS und nur, wenn
+  // der native Teil verfuegbar ist. Ohne das saehe der Nutzer bloss die schmale
+  // Leiste oben - bei einem klingelnden Telefon zu wenig. Nimmt er ueber
+  // CallKit an, ist der Bildschirm ohnehin schon der richtige.
+  const phaseFuerScreen = usePhoneStore((s) => s.phase);
+  useEffect(() =>
+  {
+    if (phaseFuerScreen === 'klingelt') router.push('/phone');
+  }, [phaseFuerScreen, router]);
+
   // Kommt die App aus dem Hintergrund zurueck, erneut nach einem Schein fragen.
   //
   // injectedJavaScript laeuft nur beim Seitenaufbau. Schaltet der Nutzer in den
@@ -299,7 +312,15 @@ export default function WebViewScreen({
   {
     const ab = AppState.addEventListener('change', (zustand) =>
     {
-      if (zustand !== 'active' || !webViewRef.current) return;
+      if (zustand !== 'active') return;
+
+      // Registrierung erneuern: iOS friert das JavaScript im Hintergrund ein,
+      // der WebSocket stirbt dabei still. Ohne diese Zeile erreicht ein
+      // eingehender Anruf die App nach einigen Minuten nicht mehr - es
+      // klingelt dann nur noch 3CX.
+      phoneManager.aufwecken();
+
+      if (!webViewRef.current) return;
       // Sperre loesen und Skript erneut einspielen.
       webViewRef.current.injectJavaScript(
         'window.__nexoroSipTicketLaeuft = false; true;');

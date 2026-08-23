@@ -293,19 +293,25 @@ export default function PhoneScreen()
 
         {klingelt ? (
           <View style={styles.klingelZeile}>
-            <Pressable
-              onPress={() => phoneManager.auflegen()}
-              style={({ pressed }) => [styles.grossKnopf, styles.rot, pressed && styles.gedrueckt]}
-            >
-              <Ionicons name="call" size={30} color="#FFFFFF"
-                style={{ transform: [{ rotate: '135deg' }] }} />
-            </Pressable>
-            <Pressable
-              onPress={() => phoneManager.annehmen()}
-              style={({ pressed }) => [styles.grossKnopf, styles.gruen, pressed && styles.gedrueckt]}
-            >
-              <Ionicons name="call" size={30} color="#FFFFFF" />
-            </Pressable>
+            <View style={styles.klingelKnopf}>
+              <Pressable
+                onPress={() => phoneManager.auflegen()}
+                style={({ pressed }) => [styles.grossKnopf, styles.rot, pressed && styles.gedrueckt]}
+              >
+                <Ionicons name="call" size={30} color="#FFFFFF"
+                  style={{ transform: [{ rotate: '135deg' }] }} />
+              </Pressable>
+              <Text style={styles.klingelText}>Ablehnen</Text>
+            </View>
+            <View style={styles.klingelKnopf}>
+              <Pressable
+                onPress={() => phoneManager.annehmen()}
+                style={({ pressed }) => [styles.grossKnopf, styles.gruen, pressed && styles.gedrueckt]}
+              >
+                <Ionicons name="call" size={30} color="#FFFFFF" />
+              </Pressable>
+              <Text style={styles.klingelText}>Annehmen</Text>
+            </View>
           </View>
         ) : (
           <Pressable
@@ -495,6 +501,8 @@ const styles = StyleSheet.create({
   klingelZeile: {
     flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center',
   },
+  klingelKnopf: { alignItems: 'center', gap: 9 },
+  klingelText: { fontSize: 13, fontWeight: '600', color: C.subtext },
 
   diagnose: {
     marginHorizontal: 20, marginTop: 10, padding: 12,
