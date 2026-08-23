@@ -15,12 +15,18 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
+import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { buildDomain, toLabel, ONBOARDING_URL, APP_UA_MARKER } from '../utils/instances';
 import { parseMeetingUrl } from '../../lib/meet/deepLinks';
 import { useMeetStore, isMeetingLive } from '../../stores/meetStore';
+import
+  {
+    getDeviceId, getPushToken, buildRegisterScript,
+    buildUnregisterScript, configureForegroundHandler,
+  } from '../../lib/push';
 
 // Verhindert sowohl den Pinch-Zoom (zwei Finger) als auch den automatischen
 // Zoom, den iOS beim Fokussieren eines Input-Feldes auslöst. Wird vor dem
@@ -120,6 +126,9 @@ true;
 const INJECT_ALL = DISABLE_ZOOM_JS + '\n' + NATIVE_BRIDGE_JS;
 
 // Message, die die Webseite schickt, um den Instanz-Switcher zu öffnen.
+// App-Version fuer das Geraete-Register (rein informativ in der Uebersicht).
+const APP_VERSION = Constants.expoConfig?.version || null;
+
 const SWITCHER_MESSAGE = 'nexoro:open-instance-switcher';
 
 // Message des Onboarding-Funnels, sobald eine Instanz fertig provisioniert ist.
@@ -235,6 +244,11 @@ export default function WebViewScreen({
   // hier nochmals setzen, entstuende ein doppelter Rand.
   const meetPhase = useMeetStore((s) => s.phase);
   const meetLive = isMeetingLive({ phase: meetPhase });
+  // Push-Registrierung. Der Token wird einmal ermittelt und danach bei jedem
+  // Seiten-Load angeboten - die Seite nimmt ihn nur an, wenn jemand angemeldet
+  // ist. Dadurch greift es auch, wenn sich der Nutzer erst spaeter anmeldet.
+  const [pushScript, setPushScript] = useState(null);
+  const deviceIdRef = useRef(null);
   const { height: windowHeight } = useWindowDimensions();
   const webViewRef = useRef(null);
   const [switcherVisible, setSwitcherVisible] = useState(false);
@@ -242,6 +256,25 @@ export default function WebViewScreen({
   const [newSubdomain, setNewSubdomain] = useState('');
   const [adding, setAdding] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // Push-Token einmalig ermitteln. Schlaegt es fehl (Simulator, abgelehnte
+  // Berechtigung), bleibt pushScript null und es wird schlicht nichts
+  // registriert - kein Fehlerfall, die App funktioniert ohne Push weiter.
+  useEffect(() =>
+  {
+    let cancelled = false;
+    (async () =>
+    {
+      configureForegroundHandler();
+      const deviceId = await getDeviceId();
+      if (!deviceId || cancelled) return;
+      deviceIdRef.current = deviceId;
+      const token = await getPushToken();
+      if (!token || cancelled) return;
+      setPushScript(buildRegisterScript(token, deviceId, APP_VERSION));
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Tastaturhöhe selbst verfolgen, statt KeyboardAvoidingView zu benutzen:
   // Das Sheet ist höhenbegrenzt (maxHeight), und ein reines Hochschieben per
@@ -415,6 +448,9 @@ export default function WebViewScreen({
     setSwitcherVisible(false);
     if (domain !== url)
     {
+      // Beim Wechsel NICHT abmelden: der Nutzer bleibt bei der alten Instanz
+      // angemeldet und soll von dort weiter Meldungen bekommen. Die neue
+      // Instanz registriert das Geraet selbst, sobald ihre Seite geladen ist.
       await onSelectDomain(domain);
     }
   };
@@ -453,7 +489,18 @@ export default function WebViewScreen({
         {
           text: 'Entfernen',
           style: 'destructive',
-          onPress: () => onRemoveDomain(domain),
+          onPress: () =>
+          {
+            // Ist es die AKTIVE Instanz, das Geraet dort noch abmelden, solange
+            // die WebView sie noch geladen hat. Danach kaeme man nicht mehr an
+            // ihre Session heran und der Nutzer bekaeme weiter Meldungen von
+            // einer Instanz, die er entfernt hat.
+            if (domain === url && deviceIdRef.current && webViewRef.current)
+            {
+              webViewRef.current.injectJavaScript(buildUnregisterScript(deviceIdRef.current));
+            }
+            onRemoveDomain(domain);
+          },
         },
       ]
     );
@@ -470,7 +517,11 @@ export default function WebViewScreen({
         startInLoadingState={true}
         scalesPageToFit={false}
         injectedJavaScriptBeforeContentLoaded={INJECT_ALL}
-        injectedJavaScript={INJECT_ALL}
+        // Push-Registrierung an den Seiteninhalt anhaengen: sie laeuft damit
+        // nach JEDEM Load. Das ist Absicht - meldet sich der Nutzer erst
+        // spaeter an, greift sie beim naechsten Seitenwechsel. Das Skript
+        // erkennt selbst, ob es schon gemeldet hat.
+        injectedJavaScript={INJECT_ALL + (pushScript || '')}
         onMessage={handleWebViewMessage}
         onShouldStartLoadWithRequest={handleShouldStartLoad}
         onOpenWindow={handleOpenWindow}
