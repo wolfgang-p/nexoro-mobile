@@ -12,8 +12,7 @@ import {
   Alert,
   Linking,
   Keyboard,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions, AppState } from 'react-native';
 import { WebView } from 'react-native-webview';
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
@@ -289,6 +288,24 @@ export default function WebViewScreen({
       setTelefonBereit(true);
     })();
     return () => { abgebrochen = true; };
+  }, []);
+
+  // Kommt die App aus dem Hintergrund zurueck, erneut nach einem Schein fragen.
+  //
+  // injectedJavaScript laeuft nur beim Seitenaufbau. Schaltet der Nutzer in den
+  // Einstellungen von "3CX" auf "Nexoro" um, ohne dass die Seite neu laedt,
+  // bliebe die App sonst bis zum naechsten Neustart ohne Zugangsdaten.
+  useEffect(() =>
+  {
+    const ab = AppState.addEventListener('change', (zustand) =>
+    {
+      if (zustand !== 'active' || !webViewRef.current) return;
+      // Sperre loesen und Skript erneut einspielen.
+      webViewRef.current.injectJavaScript(
+        'window.__nexoroSipTicketLaeuft = false; true;');
+      webViewRef.current.injectJavaScript(bauScheinSkript());
+    });
+    return () => ab.remove();
   }, []);
 
   // Push-Token einmalig ermitteln. Schlaegt es fehl (Simulator, abgelehnte
