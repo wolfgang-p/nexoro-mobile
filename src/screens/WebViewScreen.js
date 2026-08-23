@@ -136,6 +136,10 @@ const SWITCHER_MESSAGE = 'nexoro:open-instance-switcher';
 // SIP-Zugangsdaten NATIV abholt - das Passwort selbst laeuft nie durch die
 // WebView. Siehe lib/phone/sipZugang.js.
 const SIP_TICKET_MESSAGE = 'nexoro:sip-ticket';
+// Ein Anruf-Knopf im CRM wurde gedrueckt. Statt die Telefonanlage zurueckrufen
+// zu lassen (originate), waehlt die App direkt - siehe
+// oms-cluster/dist/js/nexoro-call-bridge.js.
+const PLACE_CALL_MESSAGE = 'nexoro:place-call';
 
 // Message des Onboarding-Funnels, sobald eine Instanz fertig provisioniert ist.
 // Gegenstück: notifyNativeInstanceCreated() in oms-cluster
@@ -408,6 +412,24 @@ export default function WebViewScreen({
     }
   };
 
+  /**
+   * Das CRM moechte eine Nummer waehlen.
+   *
+   * Wir oeffnen den Telefon-Bildschirm SOFORT, noch bevor der Verbindungsaufbau
+   * durch ist: Sonst starrt der Nutzer ein bis zwei Sekunden auf das CRM und
+   * weiss nicht, ob sein Tippen angekommen ist.
+   */
+  const handlePlaceCall = async (msg) =>
+  {
+    const nummer = String(msg?.number || '').trim();
+    if (!nummer) return;
+    router.push('/phone');
+    const ok = await phoneManager.anrufen(nummer);
+    // Schlaegt es fehl, steht die Meldung bereits im phoneStore und der
+    // Telefon-Bildschirm zeigt sie an.
+    if (!ok) console.warn('[phone] Anruf aus dem CRM fehlgeschlagen');
+  };
+
   const handleWebViewMessage = (event) =>
   {
     try
@@ -426,6 +448,9 @@ export default function WebViewScreen({
       } else if (msg && msg.type === SIP_TICKET_MESSAGE)
       {
         handleSipTicket(msg);
+      } else if (msg && msg.type === PLACE_CALL_MESSAGE)
+      {
+        handlePlaceCall(msg);
       }
     } catch (e)
     {
