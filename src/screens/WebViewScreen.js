@@ -27,6 +27,8 @@ import
     getDeviceId, getPushToken, buildRegisterScript,
     buildUnregisterScript, configureForegroundHandler,
   } from '../../lib/push';
+import { bauScheinSkript, loeseScheinEin, loescheSipZugang, holeSipZugang } from '../../lib/phone/sipZugang';
+import { phoneManager } from '../../lib/phone/phoneManager';
 
 // Verhindert sowohl den Pinch-Zoom (zwei Finger) als auch den automatischen
 // Zoom, den iOS beim Fokussieren eines Input-Feldes auslöst. Wird vor dem
@@ -130,6 +132,10 @@ const INJECT_ALL = DISABLE_ZOOM_JS + '\n' + NATIVE_BRIDGE_JS;
 const APP_VERSION = Constants.expoConfig?.version || null;
 
 const SWITCHER_MESSAGE = 'nexoro:open-instance-switcher';
+// Die Seite reicht einen Einmal-Schein herein, mit dem die App die
+// SIP-Zugangsdaten NATIV abholt - das Passwort selbst laeuft nie durch die
+// WebView. Siehe lib/phone/sipZugang.js.
+const SIP_TICKET_MESSAGE = 'nexoro:sip-ticket';
 
 // Message des Onboarding-Funnels, sobald eine Instanz fertig provisioniert ist.
 // Gegenstück: notifyNativeInstanceCreated() in oms-cluster
@@ -256,6 +262,30 @@ export default function WebViewScreen({
   const [newSubdomain, setNewSubdomain] = useState('');
   const [adding, setAdding] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Steht auf true, sobald ein Schein erfolgreich eingeloest wurde - also
+  // dieser Nutzer auf Nexoro Communications umgestellt hat UND Zugangsdaten
+  // hinterlegt sind. Steuert den Telefon-Eintrag im Switcher.
+  const [telefonBereit, setTelefonBereit] = useState(false);
+
+  // Beim App-Start sofort mit den gespeicherten Zugangsdaten anmelden, ohne
+  // auf die WebView zu warten.
+  //
+  // Ohne das kaeme ein eingehender Anruf erst an, nachdem die Seite geladen und
+  // ein neuer Schein durchgereicht wurde - also je nach Netz mehrere Sekunden
+  // zu spaet. Der Schein aus der WebView aktualisiert die Daten anschliessend
+  // ohnehin; verbinden() erkennt unveraenderte Zugangsdaten und tut dann nichts.
+  useEffect(() =>
+  {
+    let abgebrochen = false;
+    (async () =>
+    {
+      const zugang = await holeSipZugang();
+      if (abgebrochen || !zugang) return;
+      phoneManager.verbinden(zugang);
+      setTelefonBereit(true);
+    })();
+    return () => { abgebrochen = true; };
+  }, []);
 
   // Push-Token einmalig ermitteln. Schlaegt es fehl (Simulator, abgelehnte
   // Berechtigung), bleibt pushScript null und es wird schlicht nichts
@@ -348,6 +378,36 @@ export default function WebViewScreen({
   };
 
   // Webseite (oms-cluster Menü "Instanz wechseln") bittet um den Switcher.
+  /**
+   * Die Seite hat einen Einmal-Schein hereingereicht.
+   *
+   * Steht der Telefonie-Modus auf 3CX, kommt kein Schein - dann melden wir
+   * uns nicht an und raeumen hinterlegte Zugangsdaten weg, damit ein
+   * Umschalten sofort wirkt.
+   */
+  const handleSipTicket = async (msg) =>
+  {
+    try
+    {
+      if (msg.mode !== 'nexoro' || !msg.ticket)
+      {
+        phoneManager.trennen();
+        await loescheSipZugang();
+        setTelefonBereit(false);
+        return;
+      }
+      const zugang = await loeseScheinEin(msg.origin || url, msg.ticket);
+      if (zugang)
+      {
+        phoneManager.verbinden(zugang);
+        setTelefonBereit(true);
+      }
+    } catch (e)
+    {
+      // Ohne Telefonie laeuft die App normal weiter.
+    }
+  };
+
   const handleWebViewMessage = (event) =>
   {
     try
@@ -363,6 +423,9 @@ export default function WebViewScreen({
       {
         // Menuepunkt "Meetings" -> native Uebersicht, kein Browser-Wechsel.
         router.push('/meet');
+      } else if (msg && msg.type === SIP_TICKET_MESSAGE)
+      {
+        handleSipTicket(msg);
       }
     } catch (e)
     {
@@ -521,7 +584,7 @@ export default function WebViewScreen({
         // nach JEDEM Load. Das ist Absicht - meldet sich der Nutzer erst
         // spaeter an, greift sie beim naechsten Seitenwechsel. Das Skript
         // erkennt selbst, ob es schon gemeldet hat.
-        injectedJavaScript={INJECT_ALL + (pushScript || '')}
+        injectedJavaScript={INJECT_ALL + (pushScript || '') + bauScheinSkript()}
         onMessage={handleWebViewMessage}
         onShouldStartLoadWithRequest={handleShouldStartLoad}
         onOpenWindow={handleOpenWindow}
@@ -671,21 +734,22 @@ export default function WebViewScreen({
               <Text style={styles.createButtonText}>Neue Instanz erstellen</Text>
             </TouchableOpacity>
 
-            {/* Zugang zum SIP-Machbarkeitsnachweis (Schritt B1).
-                BEWUSST als Test gekennzeichnet — dieser Knopf und der
-                zugehoerige Bildschirm verschwinden wieder, sobald der
-                eigentliche Telefon-Client steht. */}
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() =>
-              {
-                setSwitcherVisible(false);
-                router.push('/phone/test');
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.testButtonText}>🧪  SIP-Test (Entwicklung)</Text>
-            </TouchableOpacity>
+            {/* Telefon. Nur sichtbar, wenn dieser Nutzer auf Nexoro
+                Communications umgestellt hat - sonst laeuft alles wie bisher
+                ueber 3CX, und ein Knopf hierher waere irrefuehrend. */}
+            {telefonBereit && (
+              <TouchableOpacity
+                style={styles.phoneButton}
+                onPress={() =>
+                {
+                  setSwitcherVisible(false);
+                  router.push('/phone');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.phoneButtonText}>Telefon öffnen</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>
@@ -911,6 +975,20 @@ const styles = StyleSheet.create({
 
   // Testknopf: bewusst unauffaellig und deutlich anders als die echten
   // Aktionen, damit er nicht versehentlich fuer eine Funktion gehalten wird.
+  phoneButton: {
+    width: '100%',
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#40BCC7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  phoneButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   testButton: {
     width: '100%',
     height: 44,

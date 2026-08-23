@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useInstanceStore } from '../stores/instanceStore';
 import { ActiveMeetingBar } from '../components/meet/ActiveMeetingBar';
+import { ActiveCallBar } from '../components/phone/ActiveCallBar';
 import { useMeetingDeepLinks } from '../lib/meet/deepLinks';
 
 const COLORS = { primary: '#40BCC7', background: '#F8FAFC' };
@@ -45,6 +46,9 @@ export default function RootLayout()
              des oms-cluster bleiben in der WebView sichtbar. */
           <View style={{ flex: 1 }}>
             <ActiveMeetingBar />
+            {/* Anruf-Leiste ebenfalls im Layoutfluss, aus demselben Grund:
+                Der Bereich darunter soll schrumpfen, nicht verdeckt werden. */}
+            <ActiveCallBar />
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -56,9 +60,11 @@ export default function RootLayout()
                   den Beitritts-Ablauf um. Ohne Animation, damit die Umleitung
                   nicht als eigener Schritt sichtbar wird. */}
               <Stack.Screen name="m/[roomId]" options={{ animation: 'none' }} />
-              {/* Wegwerf-Testbildschirm fuer den SIP-Machbarkeitsnachweis (B1).
-                  Wird geloescht, sobald der eigentliche Client steht. */}
-              <Stack.Screen name="phone/test" />
+              {/* Das Telefon. Vollbild, mit Minimieren in die Leiste oben -
+                  genau wie ein Meeting. Die Wisch-Geste bleibt an: anders als
+                  im Meeting-Raum ist Verlassen hier gleichbedeutend mit
+                  Minimieren, das Gespraech laeuft im phoneManager weiter. */}
+              <Stack.Screen name="phone/index" />
               <Stack.Screen name="meet/index" />
               <Stack.Screen name="meet/new" />
               <Stack.Screen name="meet/join/[id]" />
