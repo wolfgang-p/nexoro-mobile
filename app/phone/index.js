@@ -64,6 +64,10 @@ export default function PhoneScreen()
   const [notiz, setNotiz] = useState('');
   const [notizLaeuft, setNotizLaeuft] = useState(false);
   const [notizHinweis, setNotizHinweis] = useState('');
+  // Was steht im sicheren Speicher? Ohne diese Anzeige waere nicht erkennbar,
+  // ob die Anmeldung scheitert oder ob nie Zugangsdaten ankamen - beides
+  // faellt sonst unter "nicht angemeldet".
+  const [zugangInfo, setZugangInfo] = useState(null);
 
   const imGespraech = phase === 'gespraech';
   const klingelt = phase === 'klingelt';
@@ -85,9 +89,12 @@ export default function PhoneScreen()
     let abgebrochen = false;
     (async () =>
     {
-      if (registriert || phase === 'verbinden') return;
       const zugang = await holeSipZugang();
-      if (abgebrochen || !zugang) return;
+      if (abgebrochen) return;
+      setZugangInfo(zugang
+        ? { benutzer: zugang.benutzer, server: zugang.server }
+        : { fehlt: true });
+      if (registriert || phase === 'verbinden' || !zugang) return;
       phoneManager.verbinden(zugang);
     })();
     return () => { abgebrochen = true; };
@@ -197,6 +204,21 @@ export default function PhoneScreen()
             </View>
           </View>
         </View>
+
+        {!registriert && zugangInfo && (
+          <View style={styles.diagnose}>
+            {zugangInfo.fehlt ? (
+              <Text style={styles.diagnoseText}>
+                Keine Zugangsdaten in der App. Bitte im CRM unter Einstellungen
+                auf „Nexoro" umstellen und die Seite einmal neu laden.
+              </Text>
+            ) : (
+              <Text style={styles.diagnoseText}>
+                Melde an als {zugangInfo.benutzer} @ {zugangInfo.server}
+              </Text>
+            )}
+          </View>
+        )}
 
         {!!fehler && <FehlerZeile text={fehler} />}
       </View>
@@ -473,6 +495,13 @@ const styles = StyleSheet.create({
   klingelZeile: {
     flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center',
   },
+
+  diagnose: {
+    marginHorizontal: 20, marginTop: 10, padding: 12,
+    backgroundColor: C.muted, borderRadius: 12,
+    borderWidth: 1, borderColor: C.border,
+  },
+  diagnoseText: { fontSize: 12.5, color: C.subtext, lineHeight: 18 },
 
   fehlerZeile: {
     flexDirection: 'row', alignItems: 'center', gap: 7,
