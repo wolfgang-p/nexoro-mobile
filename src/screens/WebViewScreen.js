@@ -670,6 +670,22 @@ export default function WebViewScreen({
             >
               <Text style={styles.createButtonText}>Neue Instanz erstellen</Text>
             </TouchableOpacity>
+
+            {/* Zugang zum SIP-Machbarkeitsnachweis (Schritt B1).
+                BEWUSST als Test gekennzeichnet — dieser Knopf und der
+                zugehoerige Bildschirm verschwinden wieder, sobald der
+                eigentliche Telefon-Client steht. */}
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={() =>
+              {
+                setSwitcherVisible(false);
+                router.push('/phone/test');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.testButtonText}>🧪  SIP-Test (Entwicklung)</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -891,6 +907,26 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: COLORS.primary,
+  },
+
+  // Testknopf: bewusst unauffaellig und deutlich anders als die echten
+  // Aktionen, damit er nicht versehentlich fuer eine Funktion gehalten wird.
+  testButton: {
+    width: '100%',
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#94A3B8',
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  testButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
   },
 
   // --- Onboarding-Vollbild-Modal -------------------------------------------

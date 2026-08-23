@@ -2,3 +2,21 @@ node_modules/
 .expo/
 dist/
 web-build/
+
+# Native Projektordner. Sie entstehen bei `expo run:ios` / `expo run:android`
+# bzw. beim EAS-Build aus app.json (Managed Workflow, "prebuild"). Sie sind
+# reines Erzeugnis, jederzeit neu baubar — und mit ~1,5 GB nichts fuers Repo.
+#
+# ACHTUNG: Falls hier je von Hand nativer Code ergaenzt wird (eigene
+# Config-Plugins ausgenommen), muesste das anders geloest werden — dann waere
+# der Ordner nicht mehr reproduzierbar.
+/ios/
+/android/
+
+# Build-Artefakte
+*.ipa
+*.apk
+*.aab
+
+# Betriebssystem
+.DS_Store

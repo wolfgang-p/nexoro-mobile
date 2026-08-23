@@ -56,6 +56,9 @@ export default function RootLayout()
                   den Beitritts-Ablauf um. Ohne Animation, damit die Umleitung
                   nicht als eigener Schritt sichtbar wird. */}
               <Stack.Screen name="m/[roomId]" options={{ animation: 'none' }} />
+              {/* Wegwerf-Testbildschirm fuer den SIP-Machbarkeitsnachweis (B1).
+                  Wird geloescht, sobald der eigentliche Client steht. */}
+              <Stack.Screen name="phone/test" />
               <Stack.Screen name="meet/index" />
               <Stack.Screen name="meet/new" />
               <Stack.Screen name="meet/join/[id]" />
