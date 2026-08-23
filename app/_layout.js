@@ -52,6 +52,10 @@ export default function RootLayout()
               }}
             >
               <Stack.Screen name="index" />
+              {/* Auffangroute für Universal Links: leitet /m/<id> sofort auf
+                  den Beitritts-Ablauf um. Ohne Animation, damit die Umleitung
+                  nicht als eigener Schritt sichtbar wird. */}
+              <Stack.Screen name="m/[roomId]" options={{ animation: 'none' }} />
               <Stack.Screen name="meet/index" />
               <Stack.Screen name="meet/new" />
               <Stack.Screen name="meet/join/[id]" />

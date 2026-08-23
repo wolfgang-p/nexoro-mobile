@@ -40,7 +40,11 @@ export default function MoreScreen()
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
+        <Pressable
+          onPress={() => { if (router.canGoBack()) router.back(); else router.replace(`/meet/room/${ roomId }`); }}
+          hitSlop={10}
+          style={styles.headerBtn}
+        >
           <Ionicons name="chevron-down" size={24} color={dark.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Meeting</Text>

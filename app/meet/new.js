@@ -96,7 +96,11 @@ export default function NewMeeting()
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
+        <Pressable
+          onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/meet'); }}
+          hitSlop={10}
+          style={styles.headerBtn}
+        >
           <Ionicons name="chevron-back" size={24} color={light.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Neues Meeting</Text>

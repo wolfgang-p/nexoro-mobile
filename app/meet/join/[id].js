@@ -173,6 +173,15 @@ export default function JoinMeeting()
     }
   }, [joining, name, roomId, meeting, cameraOn, micOn, speaker, router]);
 
+  // Zurück: über einen Universal Link gestartet, ist dieser Screen der ERSTE
+  // im Verlauf — router.back() hätte dann kein Ziel und der Nutzer säße fest.
+  // In dem Fall in die Meeting-Übersicht wechseln.
+  const goBack = useCallback(() =>
+  {
+    if (router.canGoBack()) router.back();
+    else router.replace('/meet');
+  }, [router]);
+
   // ── Darstellung ───────────────────────────────────────────────────
 
   if (loading)
@@ -190,7 +199,7 @@ export default function JoinMeeting()
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.iconBtn}>
+        <Pressable onPress={goBack} hitSlop={10} style={styles.iconBtn}>
           <Ionicons name="chevron-back" size={24} color={dark.text} />
         </Pressable>
         <Text numberOfLines={1} style={styles.headerTitle}>
