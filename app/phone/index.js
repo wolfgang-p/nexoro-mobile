@@ -3,6 +3,7 @@ import
   {
     View, Text, Pressable, TextInput, Modal,
     StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
+    useWindowDimensions,
   } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -47,10 +48,29 @@ export default function PhoneScreen()
 {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width: fensterBreite } = useWindowDimensions();
+
+  /**
+   * Größe einer Wähltaste.
+   *
+   * Bewusst berechnet statt in Prozent: Mit `width: '30%'` und `aspectRatio`
+   * entstanden Ovale, weil die Breite vom Elternelement abhängt und die Höhe
+   * daraus abgeleitet wurde. Eine feste Zahl für beide Seiten ergibt einen
+   * echten Kreis — auf jedem Gerät.
+   *
+   * Rechnung: Bildschirmbreite minus Seitenränder, minus zwei Lücken,
+   * geteilt durch drei Spalten. Nach oben begrenzt, damit die Tastatur auf
+   * einem Tablet nicht ins Absurde wächst.
+   */
+  const seitenrand = 26;
+  const luecke = 20;
+  const tasteGroesse = Math.min(
+    76,
+    Math.floor((fensterBreite - seitenrand * 2 - luecke * 2) / 3)
+  );
 
   const phase = usePhoneStore((s) => s.phase);
   const registriert = usePhoneStore((s) => s.registriert);
-  const fehler = usePhoneStore((s) => s.fehler);
   const gegenstelle = usePhoneStore((s) => s.gegenstelle);
   const startedAt = usePhoneStore((s) => s.startedAt);
   const stumm = usePhoneStore((s) => s.stumm);
@@ -64,10 +84,9 @@ export default function PhoneScreen()
   const [notiz, setNotiz] = useState('');
   const [notizLaeuft, setNotizLaeuft] = useState(false);
   const [notizHinweis, setNotizHinweis] = useState('');
-  // Was steht im sicheren Speicher? Ohne diese Anzeige waere nicht erkennbar,
-  // ob die Anmeldung scheitert oder ob nie Zugangsdaten ankamen - beides
-  // faellt sonst unter "nicht angemeldet".
-  const [zugangInfo, setZugangInfo] = useState(null);
+  // Nur die Tatsache, ob Zugangsdaten vorliegen - NICHT welche. Nebenstelle
+  // und Servername stehen bewusst nirgends in der Oberflaeche.
+  const [zugangFehlt, setZugangFehlt] = useState(false);
 
   const imGespraech = phase === 'gespraech';
   const klingelt = phase === 'klingelt';
@@ -91,9 +110,7 @@ export default function PhoneScreen()
     {
       const zugang = await holeSipZugang();
       if (abgebrochen) return;
-      setZugangInfo(zugang
-        ? { benutzer: zugang.benutzer, server: zugang.server }
-        : { fehlt: true });
+      setZugangFehlt(!zugang);
       if (registriert || phase === 'verbinden' || !zugang) return;
       phoneManager.verbinden(zugang);
     })();
@@ -158,16 +175,35 @@ export default function PhoneScreen()
         </View>
 
         <View style={styles.waehlBereich}>
-          <Text style={styles.nummer} numberOfLines={1} adjustsFontSizeToFit>
-            {ziel || ' '}
-          </Text>
+          {/* Eigener Bereich mit fester Hoehe: Ohne ihn sprang die Tastatur
+              beim ersten Tastendruck nach unten, weil die Zeile von leer auf
+              eine Zeile Text wuchs. */}
+          <View style={styles.nummerBereich}>
+            {ziel ? (
+              <Text style={styles.nummer} numberOfLines={1} adjustsFontSizeToFit>
+                {ziel}
+              </Text>
+            ) : (
+              <Text style={[styles.nummer, styles.nummerLeer]}>
+                Nummer eingeben
+              </Text>
+            )}
+          </View>
 
-          <View style={styles.tastatur}>
+          <View style={[styles.tastatur, { gap: luecke }]}>
             {TASTEN.map(([z, b]) => (
               <Pressable
                 key={z}
                 onPress={() => setZiel((v) => v + z)}
-                style={({ pressed }) => [styles.taste, pressed && styles.tasteGedrueckt]}
+                style={({ pressed }) => [
+                  styles.taste,
+                  {
+                    width: tasteGroesse,
+                    height: tasteGroesse,
+                    borderRadius: tasteGroesse / 2,
+                  },
+                  pressed && styles.tasteGedrueckt,
+                ]}
               >
                 <Text style={styles.tasteZiffer}>{z}</Text>
                 {!!b && <Text style={styles.tasteBuchstaben}>{b}</Text>}
@@ -205,22 +241,16 @@ export default function PhoneScreen()
           </View>
         </View>
 
-        {!registriert && zugangInfo && (
-          <View style={styles.diagnose}>
-            {zugangInfo.fehlt ? (
-              <Text style={styles.diagnoseText}>
-                Keine Zugangsdaten in der App. Bitte im CRM unter Einstellungen
-                auf „Nexoro" umstellen und die Seite einmal neu laden.
-              </Text>
-            ) : (
-              <Text style={styles.diagnoseText}>
-                Melde an als {zugangInfo.benutzer} @ {zugangInfo.server}
-              </Text>
-            )}
+        {/* Bewusst OHNE technische Angaben: Nebenstelle, Servername und
+            SIP-Fehlertexte gehen den Nutzer nichts an. Er sieht nur, ob das
+            Telefon bereit ist — der Rest steht im Entwicklerprotokoll. */}
+        {!registriert && zugangFehlt && (
+          <View style={styles.hinweis}>
+            <Text style={styles.hinweisText}>
+              Telefonie ist für dieses Konto noch nicht eingerichtet.
+            </Text>
           </View>
         )}
-
-        {!!fehler && <FehlerZeile text={fehler} />}
       </View>
     );
   }
@@ -324,8 +354,6 @@ export default function PhoneScreen()
         )}
       </View>
 
-      {!!fehler && <FehlerZeile text={fehler} />}
-
       {/* ── Notiz ── */}
       <Modal
         visible={notizOffen}
@@ -390,16 +418,6 @@ function Steuerknopf({ icon, text, aktiv, onPress })
   );
 }
 
-function FehlerZeile({ text })
-{
-  return (
-    <View style={styles.fehlerZeile}>
-      <Ionicons name="alert-circle" size={15} color={C.danger} />
-      <Text style={styles.fehlerText} numberOfLines={2}>{text}</Text>
-    </View>
-  );
-}
-
 function formatDauer(s)
 {
   const m = Math.floor(s / 60);
@@ -418,35 +436,56 @@ const styles = StyleSheet.create({
   kopfZustand: { fontSize: 12.5, color: C.subtext, fontWeight: '600' },
 
   // Wählen
-  waehlBereich: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 20 },
+  // Der Bereich verteilt sich von selbst: Die Nummer bekommt oben Raum, die
+  // Tastatur sitzt in der Mitte, der Anrufknopf unten. Vorher war alles mit
+  // 'flex-end' nach unten gedrueckt und klebte aneinander.
+  waehlBereich: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 26,
+    paddingTop: 8,
+  },
+  nummerBereich: {
+    flex: 1, justifyContent: 'center', minHeight: 70, maxHeight: 130,
+  },
   nummer: {
-    fontSize: 38, fontWeight: '500', color: C.text,
-    textAlign: 'center', minHeight: 52, marginBottom: 18,
+    fontSize: 36, fontWeight: '400', color: C.text,
+    textAlign: 'center', letterSpacing: 1,
   },
+  nummerLeer: { color: C.faint, fontSize: 17, letterSpacing: 0, fontWeight: '500' },
+
   tastatur: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    justifyContent: 'space-between', rowGap: 14,
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
   },
+  // Breite, Hoehe und Radius kommen zur Laufzeit (siehe tasteGroesse) - nur
+  // so entsteht ein echter Kreis statt eines Ovals.
   taste: {
-    width: '30%', aspectRatio: 1.25, borderRadius: 999,
-    backgroundColor: C.muted, alignItems: 'center', justifyContent: 'center',
-  },
-  tasteGedrueckt: { backgroundColor: C.border },
-  tasteZiffer: { fontSize: 30, fontWeight: '400', color: C.text },
-  tasteBuchstaben: {
-    fontSize: 10, color: C.faint, letterSpacing: 1.8, fontWeight: '600', marginTop: 1,
-  },
-  waehlZeile: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginTop: 24,
-  },
-  waehlPlatz: { width: 72, alignItems: 'center' },
-  loeschKnopf: { padding: 10 },
-  anrufKnopf: {
-    width: 72, height: 72, borderRadius: 36, backgroundColor: C.success,
+    backgroundColor: C.muted,
     alignItems: 'center', justifyContent: 'center',
   },
-  anrufKnopfAus: { backgroundColor: C.border },
+  tasteGedrueckt: { backgroundColor: C.border, transform: [{ scale: 0.94 }] },
+  tasteZiffer: { fontSize: 30, fontWeight: '400', color: C.text, lineHeight: 36 },
+  tasteBuchstaben: {
+    fontSize: 9.5, color: C.faint, letterSpacing: 1.6, fontWeight: '700',
+    marginTop: -2,
+  },
+
+  waehlZeile: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginTop: 26,
+  },
+  waehlPlatz: { width: 76, alignItems: 'center', justifyContent: 'center' },
+  loeschKnopf: { padding: 12 },
+  anrufKnopf: {
+    width: 76, height: 76, borderRadius: 38, backgroundColor: C.success,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: C.success, shadowOpacity: 0.32,
+    shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 5,
+  },
+  anrufKnopfAus: {
+    backgroundColor: C.border,
+    shadowOpacity: 0, elevation: 0,
+  },
   gedrueckt: { opacity: 0.75 },
 
   // Gespräch
@@ -504,18 +543,12 @@ const styles = StyleSheet.create({
   klingelKnopf: { alignItems: 'center', gap: 9 },
   klingelText: { fontSize: 13, fontWeight: '600', color: C.subtext },
 
-  diagnose: {
+  hinweis: {
     marginHorizontal: 20, marginTop: 10, padding: 12,
     backgroundColor: C.muted, borderRadius: 12,
     borderWidth: 1, borderColor: C.border,
   },
-  diagnoseText: { fontSize: 12.5, color: C.subtext, lineHeight: 18 },
-
-  fehlerZeile: {
-    flexDirection: 'row', alignItems: 'center', gap: 7,
-    paddingHorizontal: 20, paddingVertical: 10,
-  },
-  fehlerText: { flex: 1, fontSize: 12.5, color: C.danger },
+  hinweisText: { fontSize: 12.5, color: C.subtext, lineHeight: 18, textAlign: 'center' },
 
   // Notiz
   notizHintergrund: { flex: 1, justifyContent: 'flex-end' },

@@ -141,6 +141,10 @@ const SIP_TICKET_MESSAGE = 'nexoro:sip-ticket';
 // zu lassen (originate), waehlt die App direkt - siehe
 // oms-cluster/dist/js/nexoro-call-bridge.js.
 const PLACE_CALL_MESSAGE = 'nexoro:place-call';
+// Der schwebende Knopf auf /anrufe: oeffnet nur die Waehltastatur, ohne
+// bereits eine Nummer zu waehlen. Deshalb eine eigene Nachricht - place-call
+// steigt bei leerer Nummer aus.
+const OPEN_DIALPAD_MESSAGE = 'nexoro:open-dialpad';
 
 // Message des Onboarding-Funnels, sobald eine Instanz fertig provisioniert ist.
 // Gegenstück: notifyNativeInstanceCreated() in oms-cluster
@@ -493,6 +497,9 @@ export default function WebViewScreen({
       } else if (msg && msg.type === PLACE_CALL_MESSAGE)
       {
         handlePlaceCall(msg);
+      } else if (msg && msg.type === OPEN_DIALPAD_MESSAGE)
+      {
+        router.push('/phone');
       }
     } catch (e)
     {

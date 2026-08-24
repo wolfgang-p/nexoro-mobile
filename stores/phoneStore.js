@@ -20,7 +20,9 @@ import { create } from 'zustand';
 export const usePhoneStore = create((set, get) => ({
   phase: 'idle',
   registriert: false,
-  fehler: null,
+  // Nur ein Merker, KEIN Text: Technische Meldungen (SIP-Ursachen, Server,
+  // Nebenstelle) gehoeren nicht in die Oberflaeche.
+  fehler: false,
 
   // Laufendes Gespräch
   anrufId: null,
@@ -73,7 +75,7 @@ export const usePhoneStore = create((set, get) => ({
   setMinimiert: (minimiert) => set({ minimiert }),
 
   zuruecksetzen: () => set({
-    phase: 'idle', registriert: false, fehler: null,
+    phase: 'idle', registriert: false, fehler: false,
     anrufId: null, gegenstelle: '', richtung: null, startedAt: null,
     stumm: false, gehalten: false, lautsprecher: false, minimiert: false,
   }),
