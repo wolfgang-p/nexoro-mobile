@@ -21,7 +21,8 @@
       "@config-plugins/react-native-webrtc",
       "@config-plugins/react-native-callkeep",
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      "./plugins/withVoipPushKit"
     ],
     "ios": {
       "supportsTablet": true,

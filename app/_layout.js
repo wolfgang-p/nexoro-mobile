@@ -8,6 +8,16 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useInstanceStore } from '../stores/instanceStore';
 import { ActiveMeetingBar } from '../components/meet/ActiveMeetingBar';
 import { ActiveCallBar } from '../components/phone/ActiveCallBar';
+import { voipPushStarten } from '../lib/phone/voipPush';
+
+// VoIP-Push SOFORT starten - noch vor dem ersten Rendern.
+//
+// Startet iOS die App wegen eines eingehenden Anrufs, liegen die Ereignisse
+// bereits zwischengespeichert vor. Wer erst in einem useEffect anfaengt,
+// verpasst sie. Ausserdem verlangt Apple, dass nach einem VoIP-Push
+// unverzueglich ein Anruf angezeigt wird - sonst wird die App beendet und
+// bekommt kuenftig keine Pushes mehr.
+voipPushStarten();
 import { useMeetingDeepLinks } from '../lib/meet/deepLinks';
 
 const COLORS = { primary: '#40BCC7', background: '#F8FAFC' };

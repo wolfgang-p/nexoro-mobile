@@ -28,6 +28,7 @@ import
   } from '../../lib/push';
 import { bauScheinSkript, loeseScheinEin, loescheSipZugang, holeSipZugang } from '../../lib/phone/sipZugang';
 import { phoneManager } from '../../lib/phone/phoneManager';
+import { voipTokenNachreichen } from '../../lib/phone/voipPush';
 import { usePhoneStore } from '../../stores/phoneStore';
 
 // Verhindert sowohl den Pinch-Zoom (zwei Finger) als auch den automatischen
@@ -443,6 +444,9 @@ export default function WebViewScreen({
       {
         phoneManager.verbinden(zugang);
         setTelefonBereit(true);
+        // Der VoIP-Token liegt oft schon vor, bevor die Zugangsdaten da sind -
+        // dann konnte er noch nicht hinterlegt werden. Jetzt nachholen.
+        voipTokenNachreichen();
       }
     } catch (e)
     {
